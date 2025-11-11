@@ -1,0 +1,92 @@
+# ------------------------------------
+# 1. Monorepo Cleanup (Crucial)
+# ------------------------------------
+# Prevents the temporary .gitignore files from being tracked
+/frontend/.gitignore
+/backend/.gitignore
+
+# ------------------------------------
+# 2. General / OS / IDE Ignores
+# ------------------------------------
+# OS Specific
+.DS_Store
+Thumbs.db
+*.pem
+
+# VS Code
+.vscode/
+
+# IntelliJ IDEA
+.idea
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# Eclipse / STS
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# ------------------------------------
+# 3. Java / Spring Boot / Gradle Ignores (Backend)
+# ------------------------------------
+HELP.md
+# Gradle builds
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# Compiled Java output
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+
+# ------------------------------------
+# 4. React Native / Expo Ignores (Frontend)
+# ------------------------------------
+# Dependencies and debug
+node_modules/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# Expo/Metro build output and temporary files
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# Generated Native folders (Android/iOS)
+/ios
+/android
+
+# Native-related files (Keys, certs, temp files)
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Local environment files and compiled artifacts
+.env*.local
+*.tsbuildinfo
