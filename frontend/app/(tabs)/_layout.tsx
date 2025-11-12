@@ -1,19 +1,20 @@
-import { StyleSheet, Text, View } from 'react-native'
-import React from 'react'
-import Login from './login'
+import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Tabs } from 'expo-router';
+import React from 'react';
+import Colors from '@/constants/Colors';
+import { useColorScheme } from '@/components/useColorScheme';
 
-const _layout = () => {
+export default function TabLayout() {
+  const colorScheme = useColorScheme();
+
   return (
-    <View style={styles.mainContainer}>
-      <Login/>
-    </View>
-  )
+    <Tabs
+      screenOptions={{
+        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        headerShown: false,
+      }}>
+      <Tabs.Screen name="index" options={{ title: 'Tab One' }} />
+      <Tabs.Screen name="two" options={{ title: 'Tab Two' }} />
+    </Tabs>
+  );
 }
-
-export default _layout
-
-const styles = StyleSheet.create({
-  mainContainer: {
-    flex: 1
-  }
-})
