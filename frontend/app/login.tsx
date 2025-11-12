@@ -1,8 +1,11 @@
 import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback, Keyboard} from 'react-native'
 import React from 'react'
+import { useRouter } from 'expo-router' // <--- 1. Importul necesar
 
 const login = () => {
+  const router = useRouter();
   return (
+    
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
       <View style={styles.logoStack}>
@@ -36,7 +39,8 @@ const login = () => {
           pressed && {opacity: 0.8, transform: [{scale: 0.99}]}
         ]}
         onPress={() => {
-          console.log('Login pressed')
+          console.log('Login pressed'),
+          router.replace('/(tabs)/two');
         }}
       >
         <Text style={styles.loginText}>Login</Text>
