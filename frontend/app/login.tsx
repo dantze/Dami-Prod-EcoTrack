@@ -1,17 +1,23 @@
 import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback, Keyboard} from 'react-native'
 import React from 'react'
+import { useState } from 'react'
 import { useRouter } from 'expo-router' // <--- 1. Importul necesar
 
 const login = () => {
   const router = useRouter();
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   return (
     
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
-      <View style={styles.logoStack}>
+
+        <View style={styles.logoStack}>
+
         <View style={styles.logoBar} />
         <View style={styles.logoBar} />
         <View style={styles.logoBar} />
+
         <View style={styles.textOverlay}>
           <Text style={styles.ecoTrack}>EcoTrack</Text>
         </View>
@@ -21,11 +27,15 @@ const login = () => {
           style={styles.input}
           placeholder='username'
           placeholderTextColor='#A5A5A5'
+          value={username}
+          onChangeText={setUsername}
         />
         <TextInput 
           style={styles.input}
           placeholder='parolă'
           placeholderTextColor='#A5A5A5'
+          value={password}
+          onChangeText={setPassword}
           autoCapitalize='none'
           autoCorrect={false}
           textContentType='password'
@@ -39,8 +49,10 @@ const login = () => {
           pressed && {opacity: 0.8, transform: [{scale: 0.99}]}
         ]}
         onPress={() => {
-          console.log('Login pressed'),
-          router.replace('/(tabs)/two');
+          if(username === 'A' || password === 'A') {
+            console.log('Login pressed'),
+            router.replace('/sofer/VestCentru') // <--- 2. Navigarea către ecranul "sofer/VestCentru";
+          }
         }}
       >
         <Text style={styles.loginText}>Login</Text>
