@@ -7,6 +7,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class DamiProdApplication {
 
 	public static void main(String[] args) {
+        System.out.println("--- HELLO WORLD DIN CONSOLA! ---");
+
 		SpringApplication.run(DamiProdApplication.class, args);
 	}
 
