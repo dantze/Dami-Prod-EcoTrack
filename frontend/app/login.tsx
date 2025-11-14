@@ -57,6 +57,10 @@ const login = () => {
             console.log('Login pressed'),
             router.replace('/vanzator/VestCentru') // <--- 2. Navigarea către ecranul "vanzator/VestCentru";
           }
+          else if(username === 'C' || password === 'C') {
+            console.log('Login pressed'),
+            router.replace('/tehnic/VestCentru') // <--- 2. Navigarea către ecranul "tehnic/VestCentru";
+          }
         }}
       >
         <Text style={styles.loginText}>Login</Text>
