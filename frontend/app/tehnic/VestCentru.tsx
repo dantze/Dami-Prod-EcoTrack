@@ -108,7 +108,7 @@ const VestCentru = () => {
 
                     {isCountyOpen && selectedZone && (
                         <View style={styles.dropdownContent}>
-                            <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled={true}>
+                            <ScrollView style={{ maxHeight: 180 }} nestedScrollEnabled={true}>
                                 {ZONES_DATA[selectedZone].map((countyName, index) => (
                                     <View key={index}>
                                         <Pressable
