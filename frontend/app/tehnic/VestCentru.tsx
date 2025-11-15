@@ -50,13 +50,13 @@ const VestCentru = () => {
     const handleContinue = () => {
         console.log(`Navigare către pasul următor cu: ${selectedZone} - ${selectedCounty}`);
         // Aici pui router.push('/urmatoarea_pagina')
-        router.push('/tehnic/meniu');
+        router.push({ pathname: '/tehnic/meniu', params: { zona: selectedZone } });
     };
 
     return (
         <View style={styles.container}>
             <View style={styles.headerContainer}>
-                <Text style={styles.headerText}>Selectare Zonă</Text>
+                <Text style={styles.headerText}>Selectare Zonă - tehnic</Text>
             </View>
 
             <View style={styles.inputsContainer}>

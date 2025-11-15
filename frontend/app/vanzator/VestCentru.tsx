@@ -5,7 +5,7 @@ import { AntDesign } from '@expo/vector-icons';
 
 const mapImageSource = require('../../assets/images/harta_romania.png');
 
-// DATELE
+
 const ZONES_DATA: Record<string, string[]> = {
     "Centru": ["Alba", "Cluj", "Sibiu", "Hunedoara", "Brașov", "Mureș", "Covasna", "Harghita"],
     "Vest": ["Timiș", "Arad", "Caraș-Severin", "Bihor"]
@@ -14,14 +14,14 @@ const ZONES_DATA: Record<string, string[]> = {
 const VestCentru = () => {
     const router = useRouter();
 
-    // STATE-URI
+    
     const [isZoneOpen, setIsZoneOpen] = useState(false);
     const [isCountyOpen, setIsCountyOpen] = useState(false);
 
     const [selectedZone, setSelectedZone] = useState<string | null>(null);
     const [selectedCounty, setSelectedCounty] = useState<string | null>(null);
 
-    // LOGICA
+    
     const toggleZoneMenu = () => {
         setIsZoneOpen(!isZoneOpen);
         setIsCountyOpen(false);
@@ -38,7 +38,7 @@ const VestCentru = () => {
 
     const handleSelectZone = (zone: string) => {
         setSelectedZone(zone);
-        setSelectedCounty(null); // Resetam judetul cand schimbam zona, deci butonul dispare
+        setSelectedCounty(null); 
         setIsZoneOpen(false);
     };
 
@@ -49,7 +49,7 @@ const VestCentru = () => {
 
     const handleContinue = () => {
         console.log(`Navigare către pasul următor cu: ${selectedZone} - ${selectedCounty}`);
-        // Aici pui router.push('/urmatoarea_pagina')
+        
     };
 
     return (
@@ -60,7 +60,7 @@ const VestCentru = () => {
 
             <View style={styles.inputsContainer}>
 
-                {/* === DROPDOWN 1: ZONA === */}
+                
                 <View style={[styles.dropdownWrapper, { zIndex: 200 }]}>
                     <Pressable
                         style={({ pressed }) => [styles.zoneButton, pressed && styles.buttonPressed]}
@@ -89,7 +89,7 @@ const VestCentru = () => {
                     )}
                 </View>
 
-                {/* === DROPDOWN 2: JUDET === */}
+                
                 <View style={[styles.dropdownWrapper, { zIndex: 100, marginTop: 15 }]}>
                     <Pressable
                         style={({ pressed }) => [
@@ -124,7 +124,7 @@ const VestCentru = () => {
                     )}
                 </View>
 
-                {/* === BUTONUL CONTINUA (Apare doar daca am selectat judetul) === */}
+                
                 {selectedCounty && (
                     <Pressable
                         style={({ pressed }) => [styles.continueButton, pressed && styles.buttonPressed]}
@@ -235,12 +235,12 @@ const styles = StyleSheet.create({
         width: '100%',
     },
     
-    // --- STILURI PENTRU BUTONUL CONTINUA ---
+    
     continueButton: {
-        marginTop: 30, // Spatiu fata de dropdown-ul de sus
+        marginTop: 30, 
         width: 200,
         height: 50,
-        backgroundColor: '#427992', // Culoare albastra-teal (ca in tema veche)
+        backgroundColor: '#427992', 
         borderRadius: 25,
         justifyContent: 'center',
         alignItems: 'center',
@@ -249,14 +249,13 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-        zIndex: 1, // Sa fie sub dropdown-uri daca se deschid
+        zIndex: 1, 
     },
     continueButtonText: {
         color: '#FFFFFF',
         fontSize: 18,
         fontWeight: 'bold',
     },
-    // ---------------------------------------
 
     mapContainer: {
         flex: 1,

@@ -51,15 +51,15 @@ const login = () => {
         onPress={() => {
           if(username === 'A' || password === 'A') {
             console.log('Login pressed'),
-            router.replace('/sofer/VestCentru') // <--- 2. Navigarea către ecranul "sofer/VestCentru";
+            router.push('/sofer/VestCentru') // <--- 2. Navigarea către ecranul "sofer/VestCentru";
           }
           else if(username === 'B' || password === 'B') {
             console.log('Login pressed'),
-            router.replace('/vanzator/VestCentru') // <--- 2. Navigarea către ecranul "vanzator/VestCentru";
+            router.push('/vanzator/VestCentru') // <--- 2. Navigarea către ecranul "vanzator/VestCentru";
           }
-          else if(username === 'C' || password === 'C') {
+          else if(username === '' || password === 'C') {
             console.log('Login pressed'),
-            router.replace('/tehnic/VestCentru') // <--- 2. Navigarea către ecranul "tehnic/VestCentru";
+            router.push('/tehnic/VestCentru') // <--- 2. Navigarea către ecranul "tehnic/VestCentru";
           }
         }}
       >

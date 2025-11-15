@@ -1,76 +1,22 @@
-import { StyleSheet, Text, View, Pressable, Image, ScrollView } from 'react-native'
-import React, { useState } from 'react'
-import { useRouter, useLocalSearchParams } from 'expo-router'
-import { AntDesign } from '@expo/vector-icons';
-const mapImageSource = require('../../assets/images/harta_romania.png');
+import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback, Keyboard} from 'react-native'
+import React from 'react'
+import { useState } from 'react'
+import { useRouter, useLocalSearchParams } from 'expo-router' // <--- 1. Importul necesar
 
-const meniu = () => {
-  const router = useRouter();
+const comenzi = () => {
   const { zona } = useLocalSearchParams<{ zona?: string }>();
-    const handlePress = () => {
-        console.log('Buton apasat')
-    };
+  const zonaLabel = zona ?? 'Centru';
+
     return (
-        <View style={styles.container}>
-            <View style={styles.headerContainer}>
-                <Text style = {styles.headerText}>Meniu Tehnic</Text>
-            </View>
-            {/* --- BUTOANELE DIN MENIU --- */}
-            <View style={styles.buttonsContainer}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.optiuneButton,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() =>
-                    
-                    router.push({ pathname: '/tehnic/comenzi', params: { zona } })
-                  }
-                >
-                    <Text style={styles.continueButtonText}>Comenzi</Text>
-                </Pressable>
-                    
-                <View style={styles.separator} />
-
-                <Pressable style={({ pressed }) => [
-                 styles.optiuneButton,
-                    pressed && {opacity: 0.8, transform: [{scale: 0.99}]}
-                     ]}
-                     onPress={() =>
-                    
-                    router.push({ pathname: '/tehnic/rute', params: { zona } })
-                  }
-                >
-                    <Text style={styles.continueButtonText}>Rute</Text>
-                </Pressable>
-
-                <View style={styles.separator} />
-
-                <Pressable style={({ pressed }) => [
-                 styles.optiuneButton,
-                    pressed && {opacity: 0.8, transform: [{scale: 0.99}]}
-                     ]}
-                     onPress={() =>
-                    
-                    router.push({ pathname: '/tehnic/rutesisoferi', params: { zona } })
-                  }
-                >
-                    <Text style={styles.continueButtonText}>Rute si Soferi</Text>
-                </Pressable>
-            </View>
-            {/* --- HARTA JOS --- */}
-            <View style={styles.mapContainer}>
-                <Image 
-                source={mapImageSource} 
-                style={styles.mapImage} 
-                resizeMode="contain" 
-                />
-            </View>
+    <View style={styles.container}>
+        <View style={styles.headerContainer}>
+            <Text style = {styles.headerText}>{`Comenzi - ${zonaLabel}`}</Text>
         </View>
+    </View>
     )
 }
-export default meniu;
 
+export default comenzi
 const styles = StyleSheet.create({
     container: {
         flex: 1,
