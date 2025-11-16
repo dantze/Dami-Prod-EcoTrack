@@ -19,8 +19,14 @@ const Rute = () => {
 
     const handleRutaPress = (ruta: any) => {
         console.log("Ai selectat ruta:", ruta.nume);
-        // Aici vei naviga catre detaliile rutei sau harta
-        // router.push(...)
+        
+        // Navigam catre fisierul de harta (presupunem ca se numeste 'harta.js')
+        router.push({
+            pathname: "/tehnic/harta", // sau calea corecta catre fisierul de mai sus
+            params: { 
+                numeRuta: ruta.nume // Trimitem "Cluj 1" ca sa stim ce sa filtram
+            }
+        });
     };
 
     return (
