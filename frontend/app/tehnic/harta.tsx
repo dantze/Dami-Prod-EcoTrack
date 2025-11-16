@@ -121,8 +121,14 @@ const HartaSarcini = () => {
                     <MaterialCommunityIcons name="format-list-bulleted" size={30} color="#5D8AA8" />
                 </Pressable>
                 <View style={{width: 1, height: '60%', backgroundColor: '#444'}} />
-                <Pressable style={styles.navItem}>
-                     <MaterialCommunityIcons name="map-marker-radius" size={30} color="white" />
+                <Pressable 
+                    style={styles.navItem} 
+                    onPress={() => router.push({
+                        pathname: "/tehnic/sarciniruta", // Numele noului tau fisier
+                        params: { numeRuta: numeRuta } // Trimitem numele rutei mai departe
+                    })}
+                >
+                    <MaterialCommunityIcons name="map-marker-radius" size={30} color="white" />
                 </Pressable>
             </View>
 

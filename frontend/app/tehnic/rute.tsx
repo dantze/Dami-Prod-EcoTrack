@@ -20,7 +20,6 @@ const Rute = () => {
     const handleRutaPress = (ruta: any) => {
         console.log("Ai selectat ruta:", ruta.nume);
         
-        // Navigam catre fisierul de harta (presupunem ca se numeste 'harta.js')
         router.push({
             pathname: "/tehnic/harta", // sau calea corecta catre fisierul de mai sus
             params: { 
@@ -66,9 +65,9 @@ const Rute = () => {
                     resizeMode="contain" 
                 />
                 
-                <Pressable onPress={() => console.log("Navigare Harta Full")} style={styles.navLink}>
+                {/* <Pressable onPress={() => console.log("Navigare Harta Full")} style={styles.navLink}>
                     <Text style={styles.navLinkText}>Navigează harta →</Text>
-                </Pressable>
+                </Pressable> */}
             </View>
 
         </View>
@@ -146,9 +145,10 @@ const styles = StyleSheet.create({
     },
     mapImage: {
         width: '80%',
-        height: 180,
+        height: 210,
         opacity: 0.9,
         marginBottom: 10,
+        
     },
     navLink: {
         marginTop: 10,
