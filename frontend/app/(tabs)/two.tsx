@@ -28,4 +28,14 @@ const styles = StyleSheet.create({
     height: 1,
     width: '80%',
   },
+  loginButton: {
+    position: 'absolute',
+    bottom: 270,
+    width: 220,
+    height: 45,
+    backgroundColor: '#427992',
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center'
+  }
 });
