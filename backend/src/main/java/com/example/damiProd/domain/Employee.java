@@ -34,16 +34,15 @@ public abstract class Employee implements Serializable {
     private String email;
 
     @Column(nullable = false)
-    private String parola;
-
-    private String nume;
-    private String telefon;
+    private String password;
+    private String name;
+    private String phone;
 
     // Constructor util (fara ID, ca sa fie generat)
-    public Employee(String email, String parola, String nume, String telefon) {
+    public Employee(String email, String password, String name, String phone) {
+        this.phone = phone;
         this.email = email;
-        this.parola = parola;
-        this.nume = nume;
-        this.telefon = telefon;
+        this.password = password;
+        this.name = name;
     }
 }
