@@ -55,7 +55,7 @@ const login = () => {
           }
           else if(username === 'B' || password === 'B') {
             console.log('Login pressed'),
-            router.push('/vanzator/VestCentru') // <--- 2. Navigarea către ecranul "vanzator/VestCentru";
+            router.push('/vanzari/VestCentru') // <--- 2. Navigarea către ecranul "vanzari/VestCentru";
           }
           else if(username === '' || password === '') {
             console.log('Login pressed'),
