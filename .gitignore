@@ -90,5 +90,3 @@ expo-env.d.ts
 # Local environment files and compiled artifacts
 .env*.local
 *.tsbuildinfo
-# Snyk Security Extension - AI Rules (auto-generated)
-.github\instructions\snyk_rules.instructions.md
