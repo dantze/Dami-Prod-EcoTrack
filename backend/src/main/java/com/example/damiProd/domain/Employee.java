@@ -1,48 +1,103 @@
 package com.example.damiProd.domain;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
-/**
- * Clasa de baza pentru toti angajatii.
- *
- * @Inheritance(strategy = InheritanceType.SINGLE_TABLE)
- * Ii spune lui JPA sa foloseasca o singura tabela pentru toata ierarhia.
- *
- * @DiscriminatorColumn(name = "employee_type")
- * Numele coloanei care va stoca tipul (ex: "SOFER", "VANZARI").
- *
- * @Data (Lombok) - Genereaza Getters, Setters, toString() etc.
- * @NoArgsConstructor (Lombok) - Constructor gol (cerut de JPA).
- */
 @Entity
-@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
-@DiscriminatorColumn(name = "employee_type")
-@Data
-@NoArgsConstructor
-@Table(name = "employees") // Folosim "employees" ca nume de tabela
-public abstract class Employee implements Serializable {
+@Table(name = "employees")
+public class Employee {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Am interpretat "username (email)" ca fiind un camp de email unic
-    @Column(nullable = false, unique = true)
-    private String email;
+    @Column(unique = true, nullable = false)
+    private String username;
 
     @Column(nullable = false)
     private String password;
-    private String name;
+
+    private String fullName;
     private String phone;
 
-    // Constructor util (fara ID, ca sa fie generat)
-    public Employee(String email, String password, String name, String phone) {
-        this.phone = phone;
-        this.email = email;
+    @ManyToMany(fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @JoinTable(
+        name = "employees_roles_join",
+        joinColumns = @JoinColumn(name = "employee_id"),
+        inverseJoinColumns = @JoinColumn(name = "role_id")
+    )
+    private Set<EmployeeRole> roles = new HashSet<>();
+
+    @OneToMany(mappedBy = "employee", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Route> routes = new ArrayList<>();
+
+    // --- Constructori ---
+    public Employee() {}
+
+    public Employee(String username, String password, String fullName, String phone) {
+        this.username = username;
         this.password = password;
-        this.name = name;
+        this.fullName = fullName;
+        this.phone = phone;
+    }
+
+    // --- Getters și Setters ---
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getFullName() {
+        return fullName;
+    }
+
+    public void setFullName(String fullName) {
+        this.fullName = fullName;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public Set<EmployeeRole> getRoles() {
+        return roles;
+    }
+
+    public void setRoles(Set<EmployeeRole> roles) {
+        this.roles = roles;
+    }
+
+    public List<Route> getRoutes() {
+        return routes;
+    }
+
+    public void setRoutes(List<Route> routes) {
+        this.routes = routes;
     }
 }
