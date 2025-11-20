@@ -17,9 +17,15 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.damiprod.ecotrack", 
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC93NYdvPrfesXhLM9cnVRM_1bNQUUQ1Z0" 
+        }
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false

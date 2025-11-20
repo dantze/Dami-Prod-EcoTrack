@@ -156,12 +156,12 @@ const styles = StyleSheet.create({
         width: '100%',
     },
     
-    // --- STILURI PENTRU BUTONUL CONTINUA ---
+    
     continueButton: {
-        marginTop: 10, // Spatiu fata de dropdown-ul de sus
+        marginTop: 10, 
         width: 200,
         height: 50,
-        backgroundColor: '#427992', // Culoare albastra-teal (ca in tema veche)
+        backgroundColor: '#427992', 
         borderRadius: 25,
         justifyContent: 'center',
         alignItems: 'center',
@@ -170,13 +170,13 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-        zIndex: 1, // Sa fie sub dropdown-uri daca se deschid
+        zIndex: 1, 
     },
     optiuneButton: {
-        //marginTop: 5, // Spatiu fata de dropdown-ul de sus
+        //marginTop: 5, 
         width: 330,
         height: 50,
-        backgroundColor: '#427992', // Culoare albastra-teal (ca in tema veche)
+        backgroundColor: '#427992', 
         borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
@@ -185,15 +185,14 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-        zIndex: 1, // Sa fie sub dropdown-uri daca se deschid
+        zIndex: 1, 
     },
     continueButtonText: {
         color: '#FFFFFF',
         fontSize: 18,
         fontWeight: 'bold',
     },
-    // ---------------------------------------
-
+    
     mapContainer: {
         flex: 1,
         width: '100%',

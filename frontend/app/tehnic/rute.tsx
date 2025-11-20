@@ -1,23 +1,81 @@
-import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback, Keyboard} from 'react-native'
+import { StyleSheet, Text, View, Pressable, Image, ScrollView } from 'react-native'
 import React from 'react'
-import { useState } from 'react'
-import { useRouter, useLocalSearchParams } from 'expo-router' // <--- 1. Importul necesar
+import { useRouter, useLocalSearchParams } from 'expo-router'
 
+const mapImageSource = require('../../assets/images/harta_romania.png');
 
-const rute = () => {
+// 2. Datele Mock pentru Rute (Aici vei pune datele din baza de date in viitor)
+const RUTE_DATA = [
+    { id: 1, nume: 'Cluj 1' },
+    { id: 2, nume: 'Cluj 2' },
+    { id: 3, nume: 'Sibiu' },
+    { id: 4, nume: 'Hunedoara' },
+];
+
+const Rute = () => {
+    const router = useRouter();
     const { zona } = useLocalSearchParams<{ zona?: string }>();
+    const zonaLabel = zona ?? 'Centru'; 
+
+    const handleRutaPress = (ruta: any) => {
+        console.log("Ai selectat ruta:", ruta.nume);
+        
+        router.push({
+            pathname: "/tehnic/harta", // sau calea corecta catre fisierul de mai sus
+            params: { 
+                numeRuta: ruta.nume // Trimitem "Cluj 1" ca sa stim ce sa filtram
+            }
+        });
+    };
 
     return (
-    <View style={styles.container}>
-        <View style={styles.headerContainer}>
-            <Text style = {styles.headerText}>Rute - {zona}</Text>
-        </View>
-    </View>
-    )
+        <View style={styles.container}>
+            
+            {/* Header */}
+            <View style={styles.headerContainer}>
+                <Text style={styles.headerText}>{`Rute - ${zonaLabel}`}</Text>
+            </View>
 
+            <View style={styles.listContainer}>
+                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                    {RUTE_DATA.map((item, index) => (
+                        <View key={item.id} style={styles.itemWrapper}>
+                            
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.routeButton,
+                                    pressed && styles.buttonPressed
+                                ]}
+                                onPress={() => handleRutaPress(item)}
+                            >
+                                <Text style={styles.buttonText}>{item.nume}</Text>
+                            </Pressable>
+
+                            {index < RUTE_DATA.length - 1 && <View style={styles.separator} />}
+                        
+                        </View>
+                    ))}
+                </ScrollView>
+            </View>
+
+            <View style={styles.footerContainer}>
+                <Image 
+                    source={mapImageSource} 
+                    style={styles.mapImage} 
+                    resizeMode="contain" 
+                />
+                
+                {/* <Pressable onPress={() => console.log("Navigare Harta Full")} style={styles.navLink}>
+                    <Text style={styles.navLinkText}>Navigează harta →</Text>
+                </Pressable> */}
+            </View>
+
+        </View>
+    )
 }
 
-export default rute
+export default Rute;
+
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -27,89 +85,32 @@ const styles = StyleSheet.create({
         marginTop: 60,
         paddingHorizontal: 20,
         width: '100%',
-        marginBottom: 40,
+        marginBottom: 30,
     },
     headerText: {
         color: '#FFFFFF',
-        fontSize: 22,
+        fontSize: 28, 
         fontWeight: 'bold',
         textAlign: 'left',
     },
-    inputsContainer: {
-        alignItems: 'center',
-        zIndex: 10,
-        paddingBottom: 50,
-    },
-    dropdownWrapper: {
-        position: 'relative',
-        width: 330,
+
+    listContainer: {
+        flex: 1, 
         alignItems: 'center',
     },
-    zoneButton: {
-        width: '100%',
-        height: 50,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    scrollContent: {
         alignItems: 'center',
-        paddingHorizontal: 20,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-        elevation: 3,
+        paddingBottom: 20,
     },
-    buttonDisabled: {
-        backgroundColor: '#E0E0E0',
-    },
-    buttonPressed: {
-        opacity: 0.9,
-        transform: [{ scale: 0.99 }]
-    },
-    buttonText: {
-        color: '#16283C',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    dropdownContent: {
-        position: 'absolute',
-        top: 55,
-        width: '100%',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        paddingVertical: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 5 },
-        shadowOpacity: 0.3,
-        shadowRadius: 5,
-        elevation: 10,
-        overflow: 'hidden'
-    },
-    dropdownItem: {
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        justifyContent: 'center',
-        backgroundColor: '#fff'
-    },
-    dropdownText: {
-        color: '#16283C',
-        fontSize: 16,
-        fontWeight: '500',
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#EEEEEE',
-        width: '100%',
+    itemWrapper: {
+        alignItems: 'center', 
     },
     
-    // --- STILURI PENTRU BUTONUL CONTINUA ---
-    continueButton: {
-        marginTop: 10, // Spatiu fata de dropdown-ul de sus
-        width: 200,
-        height: 50,
-        backgroundColor: '#427992', // Culoare albastra-teal (ca in tema veche)
-        borderRadius: 25,
+    routeButton: {
+        width: 300,
+        height: 60,
+        backgroundColor: '#427992', 
+        borderRadius: 20, 
         justifyContent: 'center',
         alignItems: 'center',
         elevation: 5,
@@ -117,30 +118,48 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-        zIndex: 1, // Sa fie sub dropdown-uri daca se deschid
     },
-    optiuneButton: {
-        //marginTop: 5, // Spatiu fata de dropdown-ul de sus
-        width: 330,
-        height: 50,
-        backgroundColor: '#427992', // Culoare albastra-teal (ca in tema veche)
-        borderRadius: 15,
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        zIndex: 1, // Sa fie sub dropdown-uri daca se deschid
+    buttonPressed: {
+        opacity: 0.8,
+        transform: [{ scale: 0.98 }]
     },
-    continueButtonText: {
+    buttonText: {
         color: '#FFFFFF',
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: 'bold',
     },
-    // ---------------------------------------
 
+    separator: {
+        width: 100, 
+        height: 1,
+        backgroundColor: 'rgba(255, 255, 255, 0.5)', 
+        marginVertical: 15, 
+    },
+
+    footerContainer: {
+        width: '100%',
+        height: 250, 
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        paddingBottom: 30,
+    },
+    mapImage: {
+        width: '80%',
+        height: 210,
+        opacity: 0.9,
+        marginBottom: 10,
+        
+    },
+    navLink: {
+        marginTop: 10,
+        alignSelf: 'flex-end',
+        marginRight: 30,
+    },
+    navLinkText: {
+        color: '#5D8AA8', 
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
     mapContainer: {
         flex: 1,
         width: '100%',
@@ -149,22 +168,4 @@ const styles = StyleSheet.create({
         paddingBottom: 80,
         zIndex: 1,
     },
-    buttonsContainer: {
-    flex:1 ,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingBottom: 50,
-    marginTop: 30,
-  },
-  separator: {
-    width: 100,
-    height: 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)', 
-    marginVertical: 15, 
-  },
-    mapImage: {
-        width: '90%',
-        height: 250,
-        opacity: 0.8,
-    }
 })
