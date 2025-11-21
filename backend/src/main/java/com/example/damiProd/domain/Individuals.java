@@ -26,8 +26,7 @@ public class Individuals {
     public Individuals() {
     }
 
-    public Individuals(Long id, String firstName, String lastName, String CNP) {
-        this.id = id;
+    public Individuals(String firstName, String lastName, String CNP) {
         this.firstName = firstName;
         this.lastName = lastName;
         this.CNP = CNP;
