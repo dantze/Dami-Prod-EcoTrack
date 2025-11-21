@@ -28,8 +28,7 @@ public class Company {
     public Company() {
     }
 
-    public Company(Long id, String name, String address, String CUI, String adminName) {
-        this.id = id;
+    public Company(String name, String address, String CUI, String adminName) {
         this.name = name;
         this.address = address;
         this.CUI = CUI;

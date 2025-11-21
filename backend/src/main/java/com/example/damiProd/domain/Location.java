@@ -30,8 +30,7 @@ public class Location {
     public Location() {
     }
 
-    public Location(Long id, String name, String address) {
-        this.id = id;
+    public Location(String name, String address) {
         this.name = name;
         this.address = address;
     }
