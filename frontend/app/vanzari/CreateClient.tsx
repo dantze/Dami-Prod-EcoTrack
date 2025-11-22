@@ -24,7 +24,7 @@ const CreateClient = () => {
         };
 
         try {
-            //localhost:8080 needs to be changed to the ip address of the server 
+            //Add ip address of your server here
             const response = await fetch('http://localhost:8080/api/clients', {
                 method: 'POST',
                 headers: {
