@@ -1,9 +1,6 @@
 package com.example.damiProd.domain;
 
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import lombok.Getter;
 import lombok.Setter;
 import jakarta.persistence.Table;
@@ -12,14 +9,9 @@ import jakarta.persistence.Table;
 @Getter
 @Setter
 @Table(name = "companies")
-public class Company {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class Company extends Client {
 
     private String name;
-
-    private String address;
 
     private String CUI;
 
@@ -28,9 +20,9 @@ public class Company {
     public Company() {
     }
 
-    public Company(String name, String address, String CUI, String adminName) {
+    public Company(String email, String phone, String address, String name, String CUI, String adminName) {
+        super(email, phone, address);
         this.name = name;
-        this.address = address;
         this.CUI = CUI;
         this.adminName = adminName;
     }
