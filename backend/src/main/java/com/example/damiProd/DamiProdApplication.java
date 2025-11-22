@@ -15,8 +15,7 @@ public class DamiProdApplication {
 	@Bean
 	CommandLineRunner run() {
 		return args -> {
-			System.out
-					.println("baieti doar apasati pe butonul de run si merge ... ar trb sa vedeti mesaju asta in cmd");
+			System.out.println("Server started successfully");
 		};
 	}
 

@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback, Keyboard} from 'react-native'
+import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback, Keyboard } from 'react-native'
 import React from 'react'
 import { useState } from 'react'
 import { useRouter } from 'expo-router' // <--- 1. Importul necesar
@@ -8,64 +8,67 @@ const login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   return (
-    
+
     <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
       <View style={styles.container}>
 
         <View style={styles.logoStack}>
 
-        <View style={styles.logoBar} />
-        <View style={styles.logoBar} />
-        <View style={styles.logoBar} />
+          <View style={styles.logoBar} />
+          <View style={styles.logoBar} />
+          <View style={styles.logoBar} />
 
-        <View style={styles.textOverlay}>
-          <Text style={styles.ecoTrack}>EcoTrack</Text>
+          <View style={styles.textOverlay}>
+            <Text style={styles.ecoTrack}>EcoTrack</Text>
+          </View>
         </View>
+        <View style={styles.inputFields}>
+          <TextInput
+            style={styles.input}
+            placeholder='username'
+            placeholderTextColor='#A5A5A5'
+            value={username}
+            onChangeText={setUsername}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder='parolă'
+            placeholderTextColor='#A5A5A5'
+            value={password}
+            onChangeText={setPassword}
+            autoCapitalize='none'
+            autoCorrect={false}
+            textContentType='password'
+            autoComplete='password'
+            secureTextEntry={true}
+          />
+        </View>
+        <Pressable
+          style={({ pressed }) => [
+            styles.loginButton,
+            pressed && { opacity: 0.8, transform: [{ scale: 0.99 }] }
+          ]}
+          onPress={() => {
+            if (username === 'sofer' || password === 'sofer') {
+              console.log('Login pressed'),
+                router.push('/sofer/VestCentru') // <--- 2. Navigarea către ecranul "sofer/VestCentru";
+            }
+            else if (username === 'vanzari' || password === 'vanzari') {
+              console.log('Login pressed'),
+                router.push('/vanzari/VestCentru') // <--- 2. Navigarea către ecranul "vanzari/VestCentru";
+            }
+            else if (username === 'tehnic' || password === 'tehnic') {
+              console.log('Login pressed'),
+                router.push('/tehnic/VestCentru') // <--- 2. Navigarea către ecranul "tehnic/VestCentru";
+            } else { // test
+              console.log('Login pressed for creating new client'),
+                router.push('/vanzari/CreateClient')
+            }
+          }}
+        >
+          <Text style={styles.loginText}>Login</Text>
+        </Pressable>
       </View>
-      <View style={styles.inputFields}>
-        <TextInput 
-          style={styles.input}
-          placeholder='username'
-          placeholderTextColor='#A5A5A5'
-          value={username}
-          onChangeText={setUsername}
-        />
-        <TextInput 
-          style={styles.input}
-          placeholder='parolă'
-          placeholderTextColor='#A5A5A5'
-          value={password}
-          onChangeText={setPassword}
-          autoCapitalize='none'
-          autoCorrect={false}
-          textContentType='password'
-          autoComplete='password'
-          secureTextEntry={true}
-        />
-      </View>
-      <Pressable
-        style={({ pressed }) => [
-          styles.loginButton,
-          pressed && {opacity: 0.8, transform: [{scale: 0.99}]}
-        ]}
-        onPress={() => {
-          if(username === 'A' || password === 'A') {
-            console.log('Login pressed'),
-            router.push('/sofer/VestCentru') // <--- 2. Navigarea către ecranul "sofer/VestCentru";
-          }
-          else if(username === 'B' || password === 'B') {
-            console.log('Login pressed'),
-            router.push('/vanzari/VestCentru') // <--- 2. Navigarea către ecranul "vanzari/VestCentru";
-          }
-          else if(username === '' || password === '') {
-            console.log('Login pressed'),
-            router.push('/tehnic/VestCentru') // <--- 2. Navigarea către ecranul "tehnic/VestCentru";
-          }
-        }}
-      >
-        <Text style={styles.loginText}>Login</Text>
-      </Pressable>
-    </View>
     </TouchableWithoutFeedback>
   )
 }
@@ -115,7 +118,7 @@ const styles = StyleSheet.create({
     height: 120
   },
   input: {
-    width: 290, 
+    width: 290,
     height: 50,
     backgroundColor: 'white',
     borderRadius: 14,
