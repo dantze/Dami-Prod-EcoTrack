@@ -42,6 +42,10 @@ const SarcinRuta = () => {
     const handleCardPress = (item: SarcinaItem) => {
         console.log("Vezi detalii sarcina:", item.id);
         // Poti naviga catre un ecran de detalii al sarcinii
+        router.push({
+            pathname: "/tehnic/detaliiservici", 
+            params: { id: item.id } // Trimitem ID-ul ca sa stim ce date sa incarcam
+        });
     };
 
     return (
