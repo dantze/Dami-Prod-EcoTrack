@@ -19,24 +19,24 @@ const ALL_TASKS_MOCK: TaskItem[] = [
     // Sarcini pentru ruta 'Cluj 1'
     { id: 1, rutaId: 'Cluj 1', lat: 46.7712, long: 23.6236, title: 'Sarcina 1', color: '#F4D03F' },
     { id: 2, rutaId: 'Cluj 1', lat: 46.7750, long: 23.6100, title: 'Sarcina 2', color: '#F4D03F' },
-    
+
     // Sarcini pentru ruta 'Cluj 2'
     { id: 3, rutaId: 'Cluj 2', lat: 46.7600, long: 23.6000, title: 'Sarcina A', color: '#EB984E' },
-    
+
     // Sarcini pentru ruta 'Sibiu'
     { id: 4, rutaId: 'Sibiu', lat: 45.7983, long: 24.1256, title: 'Centru Sibiu', color: '#5DADE2' },
 ];
 
 // Stilul Dark Mode
 const DARK_MAP_STYLE = [
-  { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
-  { "elementType": "labels.text.fill", "stylers": [{ "color": "#746855" }] },
-  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#242f3e" }] },
-  { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
-  { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#38414e" }] },
-  { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#212a37" }] },
-  { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#9ca5b3" }] },
-  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] }
+    { "elementType": "geometry", "stylers": [{ "color": "#242f3e" }] },
+    { "elementType": "labels.text.fill", "stylers": [{ "color": "#746855" }] },
+    { "elementType": "labels.text.stroke", "stylers": [{ "color": "#242f3e" }] },
+    { "featureType": "administrative.locality", "elementType": "labels.text.fill", "stylers": [{ "color": "#d59563" }] },
+    { "featureType": "road", "elementType": "geometry", "stylers": [{ "color": "#38414e" }] },
+    { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#212a37" }] },
+    { "featureType": "road", "elementType": "labels.text.fill", "stylers": [{ "color": "#9ca5b3" }] },
+    { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] }
 ];
 
 const HartaSarcini = () => {
@@ -52,12 +52,12 @@ const HartaSarcini = () => {
         const incarcaDatele = async () => {
             try {
                 setLoading(true);
-                
+
                 // 🗄️ BAZA DE DATE: Aici vei scrie codul real.
                 // const { data, error } = await supabase...
-                
+
                 const dateFiltrate = ALL_TASKS_MOCK.filter(task => task.rutaId === numeRuta);
-                
+
                 setTasks(dateFiltrate);
 
             } catch (error) {
@@ -72,7 +72,7 @@ const HartaSarcini = () => {
 
 
     const initialRegion = {
-        latitude: tasks.length > 0 ? tasks[0].lat : 46.7712, 
+        latitude: tasks.length > 0 ? tasks[0].lat : 46.7712,
         longitude: tasks.length > 0 ? tasks[0].long : 23.6236,
         latitudeDelta: 0.0922,
         longitudeDelta: 0.0421,
@@ -85,10 +85,10 @@ const HartaSarcini = () => {
             </View>
         );
     }
-
+    console.log("key is ---- :", process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY)
     return (
         <View style={styles.container}>
-            
+
             <MapView
                 style={styles.map}
                 provider={PROVIDER_GOOGLE}
@@ -120,9 +120,9 @@ const HartaSarcini = () => {
                 <Pressable style={styles.navItem} onPress={() => router.back()}>
                     <MaterialCommunityIcons name="format-list-bulleted" size={30} color="#5D8AA8" />
                 </Pressable>
-                <View style={{width: 1, height: '60%', backgroundColor: '#444'}} />
-                <Pressable 
-                    style={styles.navItem} 
+                <View style={{ width: 1, height: '60%', backgroundColor: '#444' }} />
+                <Pressable
+                    style={styles.navItem}
                     onPress={() => router.push({
                         pathname: "/tehnic/sarciniruta", // Numele noului tau fisier
                         params: { numeRuta: numeRuta } // Trimitem numele rutei mai departe
