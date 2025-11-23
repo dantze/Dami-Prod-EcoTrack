@@ -2,7 +2,7 @@ import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback,
 import React, { useState } from 'react'
 import { useRouter } from 'expo-router'
 
-const Login = () => {
+const login = () => {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -72,7 +72,7 @@ const Login = () => {
   )
 }
 
-export default Login
+export default login
 
 const styles = StyleSheet.create({
   container: {
