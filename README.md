@@ -1,66 +1,32 @@
-# 🚀 Dami Prod EcoTrack Project Guide
+## Dami Prod EcoTrack
 
-This is a **monorepo** containing our mobile application code. We run the Frontend (React Native) and Backend (Spring Boot) concurrently.
+**Dami Prod EcoTrack** is a comprehensive management application designed to streamline the operations of a portable toilet rental service. It connects sales, technical planning, and drivers to ensure efficient delivery, maintenance, and removal of units.
 
-## 🛠️ Essential Prerequisites
+## Project Purpose
 
-Make sure you have the following installed **before starting**:
+The core objective is to provide visibility and control over the entire lifecycle of portable toilet management for a fleet of approximately 15 drivers. The system addresses the following key workflows:
 
-1.  **JDK 21** (or 17) for the Java backend.
-2.  **Node.js** (LTS) for the frontend.
-3.  **Expo Go App** on your phone/emulator.
+1.  **Sales & Ordering**: Sales representatives input orders, specifying the type of toilet, required date, and delivery location (e.g., "Standard Toilet, Oct 15, Sesame Street").
+2.  **Technical Planning**: The technical department receives orders and organizes them into optimized routes and daily schedules for drivers.
+3.  **Driver Operations**: Drivers receive their daily routes and tasks (delivery, cleaning, or removal).
+    *   **Location Verification**: Upon arrival, drivers use the app to take a photo of the unit.
+    *   **Geotagging**: The app records the *actual* GPS location where the unit was placed/serviced, allowing for comparison with the requested address to resolve location discrepancies.
 
----
+## Tech Stack
 
-## 🏃 Project Setup and Run
+We are using a modern, robust technology stack to ensure reliability and performance.
 
-You must run the backend and frontend in **two separate terminal windows**.
+### **Frontend (Mobile App)**
+*   **Framework**: React Native with [Expo](https://expo.dev/) (SDK 54)
+*   **Language**: TypeScript
+*   **Navigation**: Expo Router
+*   **Maps**: React Native Maps (Google Maps integration)
+*   **Styling**: Native styling
 
-### 1. Start the Backend (Java API)
+### **Backend (API)**
+*   **Framework**: Spring Boot 3.5.7
+*   **Language**: Java 21
+*   **Database**: PostgreSQL (Production), H2 (Dev/Testing)
+*   **ORM**: Spring Data JPA
+*   **Tools**: Gradle, Lombok
 
-The API must be running first.
-
-1.  Open **Terminal 1** (in the project root).
-2.  Navigate to the backend folder:
-    ```bash
-    cd backend
-    ```
-3.  Execute the run command:
-    ```bash
-    ./gradlew bootRun
-    ```
-    *Wait until the server confirms it is running on **port 8080**.* **Keep this terminal open.**
-
-### 2. Start the Frontend (React Native App)
-
-1.  Open **Terminal 2**.
-2.  Navigate to the frontend folder:
-    ```bash
-    cd frontend
-    ```
-3.  Run the Expo server:
-    ```bash
-    npx expo start
-    ```
-    *A **QR code** will display in the terminal and a browser page will open.*
-
-4.  **Connect:** Scan the QR code using the **Expo Go App** on your device or emulator.
-
----
-
-## 🌐 IMPORTANT: API Connection
-
-The mobile app on your device cannot use `localhost`. All frontend API calls must use your computer's local IP address.
-
-* **Find Your IP:** Run `ipconfig` (Windows) or `ifconfig` (Mac/Linux) in a third terminal.
-* **Base URL Format:** `http://[YOUR_LOCAL_IP]:8080`
-
-**Example:** `http://192.168.1.5:8080`
-
----
-
-## 🤝 Working in Parallel (Git Workflow)
-
-* **Branch:** Always work on a new feature branch (`git checkout -b feature/your-feature-name`).
-* **Commit:** Commit your changes frequently.
-* **Pull Request (PR):** Submit a Pull Request to the `main` branch and require at least one other teammate's review before merging.
