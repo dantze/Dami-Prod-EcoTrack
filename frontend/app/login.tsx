@@ -1,9 +1,8 @@
 import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback, Keyboard } from 'react-native'
-import React from 'react'
-import { useState } from 'react'
-import { useRouter } from 'expo-router' // <--- 1. Importul necesar
+import React, { useState } from 'react'
+import { useRouter } from 'expo-router'
 
-const login = () => {
+const Login = () => {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -25,14 +24,14 @@ const login = () => {
         <View style={styles.inputFields}>
           <TextInput
             style={styles.input}
-            placeholder='username'
+            placeholder='Username'
             placeholderTextColor='#A5A5A5'
             value={username}
             onChangeText={setUsername}
           />
           <TextInput
             style={styles.input}
-            placeholder='parolă'
+            placeholder='Password'
             placeholderTextColor='#A5A5A5'
             value={password}
             onChangeText={setPassword}
@@ -49,20 +48,20 @@ const login = () => {
             pressed && { opacity: 0.8, transform: [{ scale: 0.99 }] }
           ]}
           onPress={() => {
-            if (username === 'sofer' || password === 'sofer') {
+            if (username === 'driver' || password === 'driver' || username === 'sofer' || password === 'sofer') {
               console.log('Login pressed'),
-                router.push('/sofer/VestCentru') // <--- 2. Navigarea către ecranul "sofer/VestCentru";
+                router.push('/Driver/WestCenter')
             }
-            else if (username === 'vanzari' || password === 'vanzari') {
+            else if (username === 'sales' || password === 'sales' || username === 'vanzari' || password === 'vanzari') {
               console.log('Login pressed'),
-                router.push('/vanzari/VestCentru') // <--- 2. Navigarea către ecranul "vanzari/VestCentru";
+                router.push('/Sales/WestCenter')
             }
-            else if (username === 'tehnic' || password === 'tehnic') {
+            else if (username === 'technical' || password === 'technical' || username === 'tehnic' || password === 'tehnic') {
               console.log('Login pressed'),
-                router.push('/tehnic/VestCentru') // <--- 2. Navigarea către ecranul "tehnic/VestCentru";
+                router.push('/Technical/WestCenter')
             } else { // test
               console.log('Login pressed for creating new client'),
-                router.push('/vanzari/CreateClient')
+                router.push('/Sales/CreateClient')
             }
           }}
         >
@@ -73,7 +72,7 @@ const login = () => {
   )
 }
 
-export default login
+export default Login
 
 const styles = StyleSheet.create({
   container: {
