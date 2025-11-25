@@ -48,15 +48,15 @@ const login = () => {
             pressed && { opacity: 0.8, transform: [{ scale: 0.99 }] }
           ]}
           onPress={() => {
-            if (username === 'driver' || password === 'driver' || username === 'sofer' || password === 'sofer') {
+            if (username === 'driver' || password === 'driver' || username === 'sofer' || password === 'sofer' || username === 'Driver' || password === 'Driver') {
               console.log('Login pressed'),
                 router.push('/Driver/WestCenter')
             }
-            else if (username === 'sales' || password === 'sales' || username === 'vanzari' || password === 'vanzari') {
+            else if (username === 'sales' || password === 'sales' || username === 'vanzari' || password === 'vanzari' || username === 'Sales' || password === 'Sales') {
               console.log('Login pressed'),
                 router.push('/Sales/WestCenter')
             }
-            else if (username === 'technical' || password === 'technical' || username === 'tehnic' || password === 'tehnic') {
+            else if (username === 'technical' || password === 'technical' || username === 'tehnic' || password === 'tehnic' || username === 'Technical' || password === 'Technical') {
               console.log('Login pressed'),
                 router.push('/Technical/WestCenter')
             } else { // test
