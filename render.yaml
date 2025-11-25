@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: dami-backend
+    env: java
+    root: backend
+    plan: free
+    # Ensure gradlew is executable and build the project
+    buildCommand: chmod +x gradlew && ./gradlew clean build -x test
+    # Run the generated JAR file. 
+    # Note: The JAR name depends on settings.gradle (damiProd) and build.gradle version (0.0.1-SNAPSHOT)
+    startCommand: java -jar build/libs/damiProd-0.0.1-SNAPSHOT.jar
+    envVars:
+      - key: JAVA_VERSION
+        value: "21"
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DB_HOST
+        fromDatabase:
+          name: dami-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: dami-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: dami-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: dami-db
+          property: user
+      - key: DB_PASS
+        fromDatabase:
+          name: dami-db
+          property: password
+
+databases:
+  - name: dami-db
+    databaseName: damiprod
+    user: dami_user
+    plan: free
