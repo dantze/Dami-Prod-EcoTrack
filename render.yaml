@@ -2,7 +2,7 @@ services:
   - type: web
     name: dami-backend
     env: java
-    root: backend
+    rootDir: backend
     plan: free
     # Ensure gradlew is executable and build the project
     buildCommand: chmod +x gradlew && ./gradlew clean build -x test
