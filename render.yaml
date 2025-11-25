@@ -1,14 +1,10 @@
 services:
   - type: web
     name: dami-backend
-    env: java
+    env: docker
     rootDir: backend
     plan: free
-    # Ensure gradlew is executable and build the project
-    buildCommand: chmod +x gradlew && ./gradlew clean build -x test
-    # Run the generated JAR file. 
-    # Note: The JAR name depends on settings.gradle (damiProd) and build.gradle version (0.0.1-SNAPSHOT)
-    startCommand: java -jar build/libs/damiProd-0.0.1-SNAPSHOT.jar
+    # Docker handles the build and start commands automatically via the Dockerfile
     envVars:
       - key: JAVA_VERSION
         value: "21"
