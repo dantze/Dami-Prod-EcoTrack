@@ -1,5 +1,5 @@
 import { StyleSheet, Text, View, Pressable, Switch, ScrollView, TextInput } from 'react-native'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { AntDesign } from '@expo/vector-icons';
 import DateSelector from './OrderComponents/DateSelector';
 import LocationPicker from './OrderComponents/LocationPicker';
@@ -14,7 +14,7 @@ const SERVICE_PACKETS = Array.from({ length: 12 }, (_, i) => ({
 const QUANTITY_OPTIONS = Array.from({ length: 20 }, (_, i) => (i + 1).toString());
 const IGIENIZARI_OPTIONS = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
 
-const Amplasari = ({ client }: { client: any }) => {
+const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data: any) => void }) => {
     // State
     const [isPacketDropdownOpen, setIsPacketDropdownOpen] = useState(false);
     const [selectedPacket, setSelectedPacket] = useState<typeof SERVICE_PACKETS[0] | null>(null);
@@ -39,6 +39,22 @@ const Amplasari = ({ client }: { client: any }) => {
 
     // Location State
     const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+    // Sync data with parent
+    useEffect(() => {
+        onDataChange({
+            packet: selectedPacket,
+            quantity,
+            isIndefinite,
+            duration: durationDays,
+            igienizari: igienizariPerMonth,
+            contact: contactSantier,
+            details: additionalDetails,
+            startDate: placementStartDate,
+            endDate: placementEndDate,
+            location
+        });
+    }, [selectedPacket, quantity, isIndefinite, durationDays, igienizariPerMonth, contactSantier, additionalDetails, placementStartDate, placementEndDate, location]);
 
     const togglePacketDropdown = () => {
         setIsPacketDropdownOpen(!isPacketDropdownOpen);

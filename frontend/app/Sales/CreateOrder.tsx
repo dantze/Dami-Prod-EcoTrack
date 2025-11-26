@@ -132,7 +132,10 @@ const CreateOrder = () => {
             {selectedClient && (
                 <View style={styles.footer}>
                     <Pressable
-                        style={styles.nextButton}
+                        style={({ pressed }) => [
+                            styles.nextButton,
+                            pressed && { opacity: 0.9 }
+                        ]}
                         onPress={() => router.push({
                             pathname: '/Sales/OrderDetails',
                             params: { client: JSON.stringify(selectedClient) }

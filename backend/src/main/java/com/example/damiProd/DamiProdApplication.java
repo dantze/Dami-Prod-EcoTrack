@@ -15,7 +15,7 @@ public class DamiProdApplication {
 	@Bean
 	CommandLineRunner run() {
 		return args -> {
-			System.out.println("Server started successfully 🚀 🌍 🌐");
+			System.out.println("Server started successfully");
 		};
 	}
 

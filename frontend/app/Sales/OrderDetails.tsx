@@ -15,6 +15,7 @@ const OrderDetails = () => {
 
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [selectedType, setSelectedType] = useState(ORDER_TYPES[0]);
+    const [orderData, setOrderData] = useState<any>({});
 
     const toggleDropdown = () => {
         setIsDropdownOpen(!isDropdownOpen);
@@ -22,20 +23,52 @@ const OrderDetails = () => {
 
     const handleSelectType = (type: string) => {
         setSelectedType(type);
+        setOrderData({}); // Reset data on type change
         setIsDropdownOpen(false);
+    };
+
+    const handleDataChange = (data: any) => {
+        setOrderData(data);
     };
 
     const renderOrderComponent = () => {
         switch (selectedType) {
             case "Amplasari":
-                return <Amplasari client={client} />;
+                return <Amplasari client={client} onDataChange={handleDataChange} />;
             case "Ridicari":
-                return <Ridicari client={client} />;
+                return <Ridicari client={client} onDataChange={handleDataChange} />;
             case "Igienizari":
-                return <Igienizari client={client} />;
+                return <Igienizari client={client} onDataChange={handleDataChange} />;
             default:
                 return null;
         }
+    };
+
+    const validateOrder = () => {
+        if (selectedType === "Amplasari") {
+            const { packet, quantity, isIndefinite, duration, startDate, endDate, location, contact, igienizari } = orderData;
+            if (!packet) return "Selectați un pachet.";
+            if (!quantity) return "Selectați cantitatea.";
+            if (!isIndefinite && !duration) return "Introduceți durata contractului.";
+            if (!startDate && !endDate) return "Selectați perioada de amplasare.";
+            if (!location) return "Selectați locația.";
+            if (!contact) return "Introduceți contactul de pe șantier.";
+            if (!igienizari) return "Selectați numărul de igienizări.";
+        }
+        else if (selectedType === "Ridicari") {
+            const { packetsToRemove, date, contact } = orderData;
+            const hasPackets = packetsToRemove && Object.keys(packetsToRemove).length > 0;
+            if (!hasPackets) return "Selectați cel puțin un pachet de ridicat.";
+            if (!date) return "Selectați data ridicării.";
+            if (!contact) return "Introduceți persoana de contact.";
+        }
+        else if (selectedType === "Igienizari") {
+            const { subscription, location, date } = orderData;
+            if (!subscription) return "Selectați abonamentul.";
+            if (!location) return "Selectați locația.";
+            if (!date) return "Selectați data igienizării.";
+        }
+        return null; // No errors
     };
 
     if (!client) {
@@ -51,68 +84,89 @@ const OrderDetails = () => {
 
     return (
         <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={styles.container}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
-                <View style={{ flex: 1 }}>
-                    <View style={styles.headerContainer}>
-                        <Pressable onPress={() => router.back()} style={styles.backButton}>
-                            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-                        </Pressable>
-                        <Text style={styles.headerText}>Detalii Comandă</Text>
+            <View style={{ flex: 1 }}>
+                <View style={styles.headerContainer}>
+                    <Pressable onPress={() => router.back()} style={styles.backButton}>
+                        <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                    </Pressable>
+                    <Text style={styles.headerText}>Detalii Comandă</Text>
+                </View>
+
+                <ScrollView
+                    style={styles.scrollContent}
+                    contentContainerStyle={{ paddingBottom: 50 }}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {/* Client Info Summary */}
+                    <View style={styles.clientSummary}>
+                        <Text style={styles.clientLabel}>Client Selectat:</Text>
+                        <Text style={styles.clientName}>{client.type === 'company' ? client.name : client.email}</Text>
+                        {client.type === 'company' && <Text style={styles.clientDetail}>CUI: {client.CUI}</Text>}
                     </View>
 
-                    <ScrollView
-                        style={styles.scrollContent}
-                        contentContainerStyle={{ paddingBottom: 50 }}
-                        showsVerticalScrollIndicator={false}
-                        keyboardShouldPersistTaps="handled"
+                    {/* Dropdown for Order Type */}
+                    <Text style={styles.sectionLabel}>Tip Comandă</Text>
+                    <View style={[styles.dropdownWrapper, { zIndex: 200 }]}>
+                        <Pressable
+                            style={styles.dropdownButton}
+                            onPress={toggleDropdown}
+                        >
+                            <Text style={styles.dropdownButtonText}>{selectedType}</Text>
+                            <AntDesign name={isDropdownOpen ? "up" : "down"} size={16} color="#16283C" />
+                        </Pressable>
+
+                        {isDropdownOpen && (
+                            <View style={styles.dropdownList}>
+                                {ORDER_TYPES.map((item, index) => (
+                                    <Pressable
+                                        key={index}
+                                        style={({ pressed }) => [
+                                            styles.dropdownItem,
+                                            pressed && { backgroundColor: '#F5F5F5' }
+                                        ]}
+                                        onPress={() => handleSelectType(item)}
+                                    >
+                                        <Text style={styles.dropdownItemText}>{item}</Text>
+                                        {index < ORDER_TYPES.length - 1 && <View style={styles.divider} />}
+                                    </Pressable>
+                                ))}
+                            </View>
+                        )}
+                    </View>
+
+                    <View style={{ zIndex: 100 }}>
+                        {renderOrderComponent()}
+                    </View>
+
+                    {/* Submit Button */}
+                    <Pressable
+                        style={({ pressed }) => [
+                            styles.submitButton,
+                            pressed && { opacity: 0.9 }
+                        ]}
+                        onPress={() => {
+                            const error = validateOrder();
+                            if (error) {
+                                alert(error);
+                                return;
+                            }
+
+                            // TODO: Handle form submission based on selectedType and child component state
+                            console.log("Submit Order Type:", selectedType);
+                            console.log("Order Data:", orderData);
+                            alert("Comanda a fost trimisă cu succes!");
+                            router.dismiss(2);
+                        }}
                     >
-                        {/* Client Info Summary */}
-                        <View style={styles.clientSummary}>
-                            <Text style={styles.clientLabel}>Client Selectat:</Text>
-                            <Text style={styles.clientName}>{client.type === 'company' ? client.name : client.email}</Text>
-                            {client.type === 'company' && <Text style={styles.clientDetail}>CUI: {client.CUI}</Text>}
-                        </View>
-
-                        {/* Dropdown for Order Type */}
-                        <Text style={styles.sectionLabel}>Tip Comandă</Text>
-                        <View style={[styles.dropdownWrapper, { zIndex: 200 }]}>
-                            <Pressable
-                                style={styles.dropdownButton}
-                                onPress={toggleDropdown}
-                            >
-                                <Text style={styles.dropdownButtonText}>{selectedType}</Text>
-                                <AntDesign name={isDropdownOpen ? "up" : "down"} size={16} color="#16283C" />
-                            </Pressable>
-
-                            {isDropdownOpen && (
-                                <View style={styles.dropdownList}>
-                                    {ORDER_TYPES.map((item, index) => (
-                                        <Pressable
-                                            key={index}
-                                            style={({ pressed }) => [
-                                                styles.dropdownItem,
-                                                pressed && { backgroundColor: '#F5F5F5' }
-                                            ]}
-                                            onPress={() => handleSelectType(item)}
-                                        >
-                                            <Text style={styles.dropdownItemText}>{item}</Text>
-                                            {index < ORDER_TYPES.length - 1 && <View style={styles.divider} />}
-                                        </Pressable>
-                                    ))}
-                                </View>
-                            )}
-                        </View>
-
-                        <View style={{ zIndex: 100 }}>
-                            {renderOrderComponent()}
-                        </View>
-                    </ScrollView>
-                </View>
-            </TouchableWithoutFeedback>
+                        <Text style={styles.submitButtonText}>Trimite Comanda</Text>
+                    </Pressable>
+                </ScrollView>
+            </View>
         </KeyboardAvoidingView>
     )
 }
@@ -215,5 +269,23 @@ const styles = StyleSheet.create({
         height: 1,
         backgroundColor: '#EEEEEE',
         width: '100%',
+    },
+    submitButton: {
+        backgroundColor: '#427992',
+        paddingVertical: 15,
+        borderRadius: 12,
+        alignItems: 'center',
+        marginTop: 30,
+        marginBottom: 20,
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+    },
+    submitButtonText: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: 'bold',
     },
 })

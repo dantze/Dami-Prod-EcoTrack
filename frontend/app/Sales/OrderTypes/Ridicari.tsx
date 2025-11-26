@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react'
 import { AntDesign } from '@expo/vector-icons';
 import DateSelector from './OrderComponents/DateSelector';
 
-const Ridicari = ({ client }: { client: any }) => {
+const Ridicari = ({ client, onDataChange }: { client: any, onDataChange: (data: any) => void }) => {
     // State
     const [clientPackets, setClientPackets] = useState<any[]>([]);
     // Stores how many of each packet to remove: { packetId: count }
@@ -16,6 +16,16 @@ const Ridicari = ({ client }: { client: any }) => {
     // Date Placement State
     const [placementStartDate, setPlacementStartDate] = useState('');
     const [placementEndDate, setPlacementEndDate] = useState('');
+
+    // Sync data with parent
+    useEffect(() => {
+        onDataChange({
+            packetsToRemove,
+            contact: contactPersoana,
+            details: additionalDetails,
+            date: placementStartDate // Assuming single date for pickup, or start date
+        });
+    }, [packetsToRemove, contactPersoana, additionalDetails, placementStartDate]);
 
     // Mock Fetch Client Packets
     useEffect(() => {
