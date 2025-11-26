@@ -46,7 +46,9 @@ const Menu = () => {
                         styles.menuButton,
                         pressed && styles.buttonPressed
                     ]}
-                    onPress={() => console.log("Navigate to CreateOrder")}
+                    onPress={() => router.push({
+                        pathname: '/Sales/CreateOrder',
+                    })}
                 >
                     <Text style={styles.buttonText}>Creare Comanda</Text>
                 </Pressable>

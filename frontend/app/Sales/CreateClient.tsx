@@ -1,7 +1,8 @@
-import { StyleSheet, Text, View, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native'
+import { StyleSheet, Text, View, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert } from 'react-native'
 import React, { useState } from 'react'
 import { useRouter } from 'expo-router'
 import { AntDesign } from '@expo/vector-icons';
+import { API_BASE_URL } from '../../constants/ApiConfig';
 
 const TIP_CLIENT = ["Persoană fizică", "Firme"];
 
@@ -54,6 +55,19 @@ const CreateClient = () => {
     };
 
     const handleCreate = async () => {
+        // Validation
+        if (!email.trim() || !phone.trim() || !address.trim()) {
+            Alert.alert("Lipsesc informații!");
+            return;
+        }
+
+        if (selectedType === "Firme") {
+            if (!companyName.trim() || !cui.trim() || !adminName.trim()) {
+                Alert.alert("Lipsesc informații!");
+                return;
+            }
+        }
+
         // Construct client data based on selected type
         const clientData = {
             type: selectedType === "Firme" ? 'company' : 'individual',
@@ -61,8 +75,7 @@ const CreateClient = () => {
             phone,
             address,
             // Include company fields only if type is 'Firme' (or always if backend expects them)
-            // Keeping them as per original logic but adapting to the new UI structure
-            name: selectedType === "Firme" ? companyName : '', // 'name' maps to companyName in original
+            name: selectedType === "Firme" ? companyName : '',
             CUI: selectedType === "Firme" ? cui : '',
             adminName: selectedType === "Firme" ? adminName : ''
         };
@@ -70,8 +83,7 @@ const CreateClient = () => {
         console.log("Creating client with data:", clientData);
 
         try {
-            // Add ip address of your server here
-            const response = await fetch('http://localhost:8080/api/clients', {
+            const response = await fetch(`${API_BASE_URL}/clients`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -88,6 +100,7 @@ const CreateClient = () => {
             router.back();
         } catch (error) {
             console.error('Error creating client:', error);
+            Alert.alert("Error", "Failed to create client. Please try again.");
         }
     };
 
@@ -98,7 +111,7 @@ const CreateClient = () => {
                 style={styles.container}
             >
                 <View style={styles.headerContainer}>
-                    <Text style={styles.headerText}>Create Client</Text>
+                    <Text style={styles.headerText}>Creare Client</Text>
                 </View>
 
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -132,27 +145,38 @@ const CreateClient = () => {
                     {/* --- FORM FIELDS --- */}
                     <View style={{ zIndex: 100, width: '100%', marginTop: 20 }}>
                         <InputField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
-                        <InputField label="Phone" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
-                        <InputField label="Address" value={address} onChangeText={setAddress} />
+                        <InputField label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+                        <InputField label="Adresa" value={address} onChangeText={setAddress} />
 
                         {/* Conditional rendering for Company fields */}
                         {selectedType === "Firme" && (
                             <>
-                                <InputField label="Company Name" value={companyName} onChangeText={setCompanyName} />
+                                <InputField label="Nume companie" value={companyName} onChangeText={setCompanyName} />
                                 <InputField label="CUI" value={cui} onChangeText={setCui} />
-                                <InputField label="Administrator Name" value={adminName} onChangeText={setAdminName} />
+                                <InputField label="Nume administrator" value={adminName} onChangeText={setAdminName} />
                             </>
                         )}
                     </View>
 
-                    {/* --- CREATE BUTTON --- */}
-                    <Pressable
-                        style={({ pressed }) => [styles.createButton, pressed && { opacity: 0.9 }]}
-                        onPress={handleCreate}
-                    >
-                        <Text style={styles.createButtonText}>Create Client</Text>
-                    </Pressable>
+                    {/* --- CREATE BUTTONS --- */}
+                    <View style={{ width: '100%', marginTop: 30 }}>
+                        <Pressable
+                            style={({ pressed }) => [styles.createButton, pressed && { opacity: 0.9 }]}
+                            onPress={handleCreate}
+                        >
+                            <Text style={styles.createButtonText}>Finalizare</Text>
+                        </Pressable>
 
+                        {/* create order after client creation */}
+                        <Pressable
+                            style={({ pressed }) => [styles.createButton, pressed && { opacity: 0.9 }]}
+                            onPress={() => router.push({
+                                pathname: '/Sales/CreateOrder',
+                            })}
+                        >
+                            <Text style={styles.createButtonText}>Creare Comanda Client</Text>
+                        </Pressable>
+                    </View>
                 </ScrollView>
 
             </KeyboardAvoidingView>
@@ -241,7 +265,7 @@ const styles = StyleSheet.create({
     },
     input: {
         width: '100%',
-        height: 50,
+        height: 45,
         backgroundColor: '#FFFFFF',
         borderRadius: 12,
         paddingHorizontal: 15,
@@ -257,8 +281,7 @@ const styles = StyleSheet.create({
         borderRadius: 15,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 30,
-        marginBottom: 20,
+        marginBottom: 10,
         elevation: 5,
     },
     createButtonText: {
