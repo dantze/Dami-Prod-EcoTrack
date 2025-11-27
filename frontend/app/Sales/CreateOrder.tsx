@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react'
 import { useRouter } from 'expo-router'
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../../constants/ApiConfig';
+import { ClientService } from '../../services/ClientService';
 
 type Client = {
     id: number;
@@ -35,11 +36,7 @@ const CreateOrder = () => {
 
     const fetchClients = async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/clients`);
-            if (!response.ok) {
-                throw new Error('Failed to fetch clients');
-            }
-            const data = await response.json();
+            const data = await ClientService.getClients();
             setClients(data);
             setFilteredClients(data);
         } catch (error) {

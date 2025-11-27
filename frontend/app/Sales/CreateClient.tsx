@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import { useRouter } from 'expo-router'
 import { AntDesign } from '@expo/vector-icons';
 import { API_BASE_URL } from '../../constants/ApiConfig';
+import { ClientService, ClientType } from '../../services/ClientService';
 
 const TIP_CLIENT = ["Persoană fizică", "Firme"];
 
@@ -70,12 +71,13 @@ const CreateClient = () => {
 
         // Construct client data based on selected type
         const clientData = {
-            type: selectedType === "Firme" ? 'company' : 'individual',
+            type: (selectedType === "Firme" ? 'company' : 'individual') as ClientType,
             email,
             phone,
             address,
             // Include company fields only if type is 'Firme' (or always if backend expects them)
             name: selectedType === "Firme" ? companyName : '',
+
             CUI: selectedType === "Firme" ? cui : '',
             adminName: selectedType === "Firme" ? adminName : ''
         };
@@ -83,19 +85,7 @@ const CreateClient = () => {
         console.log("Creating client with data:", clientData);
 
         try {
-            const response = await fetch(`${API_BASE_URL}/clients`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(clientData),
-            });
-
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-
-            const data = await response.json();
+            const data = await ClientService.createClient(clientData);
             console.log('Client created successfully:', data);
             router.back();
         } catch (error) {
