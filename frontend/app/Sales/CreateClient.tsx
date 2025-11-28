@@ -55,7 +55,7 @@ const CreateClient = () => {
         setIsDropdownOpen(false);
     };
 
-    const handleCreate = async () => {
+    const handleCreate = async (shouldCreateOrder = false) => {
         // Validation
         if (!email.trim() || !phone.trim() || !address.trim()) {
             Alert.alert("Lipsesc informații!");
@@ -87,7 +87,15 @@ const CreateClient = () => {
         try {
             const data = await ClientService.createClient(clientData);
             console.log('Client created successfully:', data);
-            router.back();
+            
+            if (shouldCreateOrder && data) {
+                router.push({
+                    pathname: '/Sales/OrderDetails',
+                    params: { client: JSON.stringify(data) }
+                });
+            } else {
+                router.back();
+            }
         } catch (error) {
             console.error('Error creating client:', error);
             Alert.alert("Error", "Failed to create client. Please try again.");
@@ -152,7 +160,7 @@ const CreateClient = () => {
                     <View style={{ width: '100%', marginTop: 30 }}>
                         <Pressable
                             style={({ pressed }) => [styles.createButton, pressed && { opacity: 0.9 }]}
-                            onPress={handleCreate}
+                            onPress={() => handleCreate(false)}
                         >
                             <Text style={styles.createButtonText}>Finalizare</Text>
                         </Pressable>
@@ -160,9 +168,7 @@ const CreateClient = () => {
                         {/* create order after client creation */}
                         <Pressable
                             style={({ pressed }) => [styles.createButton, pressed && { opacity: 0.9 }]}
-                            onPress={() => router.push({
-                                pathname: '/Sales/CreateOrder',
-                            })}
+                            onPress={() => handleCreate(true)}
                         >
                             <Text style={styles.createButtonText}>Creare Comanda Client</Text>
                         </Pressable>
