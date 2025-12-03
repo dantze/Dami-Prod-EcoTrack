@@ -32,11 +32,34 @@ const DEFAULT_REGION = {
     longitudeDelta: 0.05,
 };
 
+// Custom Map Style to remove POIs and simplify
+const MAP_STYLE = [
+    {
+        "featureType": "poi",
+        "stylers": [
+            { "visibility": "off" }
+        ]
+    },
+    {
+        "featureType": "road.highway",
+        "stylers": [
+            { "visibility": "simplified" }
+        ]
+    },
+    {
+        "featureType": "transit",
+        "stylers": [
+            { "visibility": "off" }
+        ]
+    }
+];
+
 const LocationPicker = ({ onLocationSelect, initialLocation, existingPlacements = [] }: LocationPickerProps) => {
     const [modalVisible, setModalVisible] = useState(false);
     const [region, setRegion] = useState<Region>(DEFAULT_REGION);
     const [selectedLocation, setSelectedLocation] = useState<Location | null>(initialLocation || null);
     const [selectedExistingId, setSelectedExistingId] = useState<number | undefined>(undefined);
+    const mapRef = React.useRef<MapView>(null);
 
     const handleRegionChange = (newRegion: Region) => {
         setRegion(newRegion);
@@ -49,12 +72,15 @@ const LocationPicker = ({ onLocationSelect, initialLocation, existingPlacements 
     const handleMarkerPress = (placement: ExistingPlacement) => {
         setSelectedExistingId(placement.id);
         setSelectedLocation({ latitude: placement.latitude, longitude: placement.longitude });
-        // Center map on marker
-        setRegion({
+
+        // Animate map to center on marker
+        const newRegion = {
             ...region,
             latitude: placement.latitude,
             longitude: placement.longitude,
-        });
+        };
+        setRegion(newRegion);
+        mapRef.current?.animateToRegion(newRegion, 500);
     };
 
     const confirmLocation = () => {
@@ -106,11 +132,13 @@ const LocationPicker = ({ onLocationSelect, initialLocation, existingPlacements 
             >
                 <View style={styles.modalContainer}>
                     <MapView
+                        ref={mapRef}
                         provider={PROVIDER_GOOGLE}
                         style={styles.map}
                         initialRegion={DEFAULT_REGION}
                         onRegionChangeComplete={handleRegionChange}
                         onPress={resetSelection} // Clicking map background resets to "New Location" mode
+                        customMapStyle={MAP_STYLE}
                     >
                         {existingPlacements.map((placement) => (
                             <Marker
@@ -272,23 +300,11 @@ const styles = StyleSheet.create({
         minWidth: 30,
         height: 30,
         borderRadius: 15,
-        paddingHorizontal: 5,
-        borderWidth: 2,
-        borderColor: 'white',
         alignItems: 'center',
         justifyContent: 'center',
-        elevation: 5,
-        shadowColor: "#000",
-        shadowOffset: {
-            width: 0,
-            height: 2,
-        },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
     },
     selectedCluster: {
         backgroundColor: '#FF9800', // Orange when selected
-        transform: [{ scale: 1.1 }],
         zIndex: 10,
     },
     clusterText: {

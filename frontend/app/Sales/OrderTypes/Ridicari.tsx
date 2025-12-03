@@ -1,13 +1,16 @@
-import { StyleSheet, Text, View, Pressable, ScrollView, TextInput } from 'react-native'
+import { StyleSheet, Text, View, Pressable, ScrollView, TextInput, ActivityIndicator } from 'react-native'
 import React, { useState, useEffect } from 'react'
 import { AntDesign } from '@expo/vector-icons';
 import DateSelector from './OrderComponents/DateSelector';
+import { ClientService } from '../../../services/ClientService';
+import * as Location from 'expo-location';
 
 const Ridicari = ({ client, onDataChange }: { client: any, onDataChange: (data: any) => void }) => {
     // State
     const [clientPackets, setClientPackets] = useState<any[]>([]);
-    // Stores how many of each packet to remove: { packetId: count }
-    const [packetsToRemove, setPacketsToRemove] = useState<{ [key: number]: number }>({});
+    const [loading, setLoading] = useState(false);
+    // Stores how many of each packet group to remove: { groupKey: count }
+    const [packetsToRemove, setPacketsToRemove] = useState<{ [key: string]: number }>({});
 
     // New Fields State
     const [contactPersoana, setContactPersoana] = useState('');
@@ -23,41 +26,117 @@ const Ridicari = ({ client, onDataChange }: { client: any, onDataChange: (data: 
             packetsToRemove,
             contact: contactPersoana,
             details: additionalDetails,
-            date: placementStartDate // Assuming single date for pickup, or start date
+            date: placementStartDate
         });
     }, [packetsToRemove, contactPersoana, additionalDetails, placementStartDate]);
 
-    // Mock Fetch Client Packets
+    // Fetch Client Packets & Reverse Geocode
     useEffect(() => {
-        // TODO: Fetch actual packets from DB based on client.id
-        console.log("Fetching packets for client:", client?.id);
+        if (!client?.id) return;
 
-        // Mocking data for now - 'count' represents how many they currently have on site
-        const mockPackets = [
-            { id: 101, name: 'Pachet Eco Standard', count: 5 },
-            { id: 102, name: 'Pachet Premium', count: 2 },
-            { id: 103, name: 'Pachet Basic', count: 1 }
-        ];
-        setClientPackets(mockPackets);
+        const fetchAndGroupOrders = async () => {
+            setLoading(true);
+            try {
+                // 1. Fetch Orders
+                const orders = await ClientService.getOrders(client.id);
+
+                // 2. Filter for active 'Amplasari' (assuming they are the ones we can pick up)
+                // In a real app, we might check status like 'ACTIVE' or 'DEPLOYED'
+                const activeOrders = orders.filter((o: any) =>
+                    o.orderType === 'Amplasari' && o.locationCoordinates
+                );
+
+                // 3. Group by Product + Location
+                const groups: { [key: string]: any } = {};
+
+                for (const order of activeOrders) {
+                    const locKey = order.locationCoordinates; // "lat,long"
+                    const prodId = order.product?.id || 'unknown';
+                    const groupKey = `${prodId}_${locKey}`;
+
+                    if (!groups[groupKey]) {
+                        groups[groupKey] = {
+                            key: groupKey,
+                            productId: prodId,
+                            productName: order.product?.name || 'Produs Necunoscut',
+                            locationCoordinates: locKey,
+                            totalCount: 0,
+                            address: 'Se încarcă adresa...',
+                            orders: [] // Keep track of orders in this group if needed
+                        };
+                    }
+
+                    groups[groupKey].totalCount += (order.quantity || 1);
+                    groups[groupKey].orders.push(order);
+                }
+
+                // 4. Convert to array and set initial state
+                const groupsArray = Object.values(groups);
+                setClientPackets(groupsArray);
+
+                // 5. Reverse Geocode (Async)
+                // We do this after setting initial state so the UI shows up quickly
+                const updatedGroups = [...groupsArray];
+                let hasUpdates = false;
+
+                for (let i = 0; i < updatedGroups.length; i++) {
+                    const group = updatedGroups[i];
+                    if (group.locationCoordinates && group.locationCoordinates.includes(',')) {
+                        const [latStr, longStr] = group.locationCoordinates.split(',');
+                        const lat = parseFloat(latStr);
+                        const long = parseFloat(longStr);
+
+                        try {
+                            const addressResponse = await Location.reverseGeocodeAsync({ latitude: lat, longitude: long });
+                            if (addressResponse && addressResponse.length > 0) {
+                                const addr = addressResponse[0];
+                                // Construct a readable address
+                                const street = addr.street || '';
+                                const number = addr.streetNumber || '';
+                                const city = addr.city || addr.subregion || '';
+                                group.address = `${street} ${number}, ${city}`.trim();
+                                if (group.address === ',') group.address = 'Adresă necunoscută';
+                                hasUpdates = true;
+                            }
+                        } catch (err) {
+                            console.log("Geocoding error for", group.locationCoordinates, err);
+                            group.address = "Eroare localizare";
+                            hasUpdates = true;
+                        }
+                    }
+                }
+
+                if (hasUpdates) {
+                    setClientPackets([...updatedGroups]);
+                }
+
+            } catch (error) {
+                console.error("Failed to fetch/group orders:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchAndGroupOrders();
     }, [client]);
 
-    const handleIncrement = (packetId: number, maxCount: number) => {
+    const handleIncrement = (groupKey: string, maxCount: number) => {
         setPacketsToRemove(prev => {
-            const current = prev[packetId] || 0;
+            const current = prev[groupKey] || 0;
             if (current < maxCount) {
-                return { ...prev, [packetId]: current + 1 };
+                return { ...prev, [groupKey]: current + 1 };
             }
             return prev;
         });
     };
 
-    const handleDecrement = (packetId: number) => {
+    const handleDecrement = (groupKey: string) => {
         setPacketsToRemove(prev => {
-            const current = prev[packetId] || 0;
+            const current = prev[groupKey] || 0;
             if (current > 0) {
-                const newState = { ...prev, [packetId]: current - 1 };
-                if (newState[packetId] === 0) {
-                    delete newState[packetId];
+                const newState = { ...prev, [groupKey]: current - 1 };
+                if (newState[groupKey] === 0) {
+                    delete newState[groupKey];
                     return newState;
                 }
                 return newState;
@@ -73,24 +152,35 @@ const Ridicari = ({ client, onDataChange }: { client: any, onDataChange: (data: 
             {/* --- PACKET LIST --- */}
             <Text style={styles.label}>Selectează Pachete de Ridicat</Text>
             <View style={styles.packetListContainer}>
-                {clientPackets.length > 0 ? (
-                    clientPackets.map((packet) => {
-                        const toRemove = packetsToRemove[packet.id] || 0;
-                        const remaining = packet.count - toRemove;
+                {loading ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                ) : clientPackets.length > 0 ? (
+                    clientPackets.map((group) => {
+                        const toRemove = packetsToRemove[group.key] || 0;
+                        const remaining = group.totalCount - toRemove;
 
                         return (
-                            <View key={packet.id} style={[styles.packetRow, toRemove > 0 && styles.packetRowActive]}>
-                                <View style={{ flex: 1 }}>
-                                    <Text style={styles.packetName}>{packet.name}</Text>
+                            <View key={group.key} style={[styles.packetRow, toRemove > 0 && styles.packetRowActive]}>
+                                <View style={{ flex: 1, paddingRight: 10 }}>
+                                    <Text style={styles.packetName}>{group.productName}</Text>
+
+                                    {/* Location Address */}
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4 }}>
+                                        <AntDesign name="environment" size={12} color="#666" style={{ marginRight: 4 }} />
+                                        <Text style={styles.addressText} numberOfLines={2}>
+                                            {group.address}
+                                        </Text>
+                                    </View>
+
                                     <Text style={styles.packetSubtext}>
-                                        Disponibil: <Text style={{ fontWeight: 'bold', color: '#4CAF50' }}>{remaining}</Text> / {packet.count}
+                                        Disponibil: <Text style={{ fontWeight: 'bold', color: '#4CAF50' }}>{remaining}</Text> / {group.totalCount}
                                     </Text>
                                 </View>
 
                                 <View style={styles.counterContainer}>
                                     <Pressable
                                         style={[styles.counterButton, toRemove === 0 && styles.counterButtonDisabled]}
-                                        onPress={() => handleDecrement(packet.id)}
+                                        onPress={() => handleDecrement(group.key)}
                                     >
                                         <AntDesign name="minus" size={16} color={toRemove === 0 ? "#ccc" : "#16283C"} />
                                     </Pressable>
@@ -102,10 +192,10 @@ const Ridicari = ({ client, onDataChange }: { client: any, onDataChange: (data: 
                                     </View>
 
                                     <Pressable
-                                        style={[styles.counterButton, toRemove >= packet.count && styles.counterButtonDisabled]}
-                                        onPress={() => handleIncrement(packet.id, packet.count)}
+                                        style={[styles.counterButton, toRemove >= group.totalCount && styles.counterButtonDisabled]}
+                                        onPress={() => handleIncrement(group.key, group.totalCount)}
                                     >
-                                        <AntDesign name="plus" size={16} color={toRemove >= packet.count ? "#ccc" : "#16283C"} />
+                                        <AntDesign name="plus" size={16} color={toRemove >= group.totalCount ? "#ccc" : "#16283C"} />
                                     </Pressable>
                                 </View>
                             </View>
@@ -113,7 +203,7 @@ const Ridicari = ({ client, onDataChange }: { client: any, onDataChange: (data: 
                     })
                 ) : (
                     <Text style={{ color: '#999', fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
-                        Acest client nu are pachete active.
+                        Acest client nu are pachete active la locații cunoscute.
                     </Text>
                 )}
             </View>
@@ -209,6 +299,12 @@ const styles = StyleSheet.create({
         color: '#666',
         fontSize: 12,
         marginTop: 2,
+    },
+    addressText: {
+        color: '#666',
+        fontSize: 12,
+        fontStyle: 'italic',
+        flex: 1,
     },
     counterContainer: {
         flexDirection: 'row',

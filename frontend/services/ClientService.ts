@@ -64,5 +64,17 @@ export const ClientService = {
         }
 
         return await response.json();
+    },
+
+    /**
+     * Fetches all orders for a specific client.
+     * @param clientId The ID of the client.
+     */
+    getOrders: async (clientId: number) => {
+        const response = await fetch(`${API_BASE_URL}/clients/${clientId}/orders`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch orders');
+        }
+        return await response.json();
     }
 };

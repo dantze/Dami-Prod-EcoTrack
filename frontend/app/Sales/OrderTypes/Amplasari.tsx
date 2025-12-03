@@ -3,19 +3,23 @@ import React, { useState, useEffect } from 'react'
 import { AntDesign } from '@expo/vector-icons';
 import DateSelector from './OrderComponents/DateSelector';
 import LocationPicker from './OrderComponents/LocationPicker';
+import { ClientService } from '../../../services/ClientService';
+import { API_BASE_URL } from '../../../constants/ApiConfig';
 
-// Mock Data
+// Mock Data (Service Packets can stay mock for now or be fetched, but user asked for client orders specifically)
+// Ideally we should fetch products too, but let's stick to the user's specific request about map points first.
+// Actually, earlier we did fetch products. Let's make sure we keep that if it was there.
+// Wait, looking at previous file content, SERVICE_PACKETS was mock data.
+// The user previously asked to fetch products, but then I reverted to mock data in step 408 because of syntax errors.
+// Let's re-implement product fetching if possible, OR just stick to the map request.
+// The user said "collect from each client their orders... and make those points on the map".
+// I will focus on the map points (client orders) now.
+
 const SERVICE_PACKETS = Array.from({ length: 12 }, (_, i) => ({
     id: i + 1,
     name: `Pachet servicii ${i + 1}`,
     price: (i + 1) * 50 + 100
 }));
-
-const EXISTING_PLACEMENTS = [
-    { id: 101, latitude: 44.4268, longitude: 26.1025, count: 2, name: 'Santier A' },
-    { id: 102, latitude: 44.4300, longitude: 26.1100, count: 1, name: 'Santier B' },
-    { id: 103, latitude: 44.4200, longitude: 26.0900, count: 5, name: 'Santier C' },
-];
 
 const QUANTITY_OPTIONS = Array.from({ length: 20 }, (_, i) => (i + 1).toString());
 const IGIENIZARI_OPTIONS = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
@@ -24,6 +28,9 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
     // State
     const [isPacketDropdownOpen, setIsPacketDropdownOpen] = useState(false);
     const [selectedPacket, setSelectedPacket] = useState<typeof SERVICE_PACKETS[0] | null>(null);
+
+    // Product Fetching State (Optional, but good to have if we want to be consistent)
+    const [products, setProducts] = useState<any[]>(SERVICE_PACKETS);
 
     // Quantity State
     const [isQuantityDropdownOpen, setIsQuantityDropdownOpen] = useState(false);
@@ -45,6 +52,61 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
 
     // Location State
     const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+    const [existingPlacements, setExistingPlacements] = useState<any[]>([]);
+
+    // Fetch Client Orders for Map
+    useEffect(() => {
+        if (client?.id) {
+            ClientService.getOrders(client.id)
+                .then(orders => {
+                    const rawPlacements = orders
+                        .filter((o: any) => o.locationCoordinates && o.locationCoordinates.includes(','))
+                        .map((o: any) => {
+                            const parts = o.locationCoordinates.split(',');
+                            return {
+                                id: o.id,
+                                latitude: parseFloat(parts[0]),
+                                longitude: parseFloat(parts[1]),
+                                count: o.quantity || 1,
+                                name: o.product?.name || 'Produs'
+                            };
+                        });
+
+                    // Simple Clustering Logic
+                    const clustered: any[] = [];
+                    const THRESHOLD = 0.0002; // Approx 20-30 meters
+
+                    rawPlacements.forEach((p: any) => {
+                        const existing = clustered.find(c =>
+                            Math.abs(c.latitude - p.latitude) < THRESHOLD &&
+                            Math.abs(c.longitude - p.longitude) < THRESHOLD
+                        );
+
+                        if (existing) {
+                            existing.count += p.count;
+                            // Optional: Keep track of IDs if needed, but for now just summing count
+                        } else {
+                            clustered.push({ ...p });
+                        }
+                    });
+
+                    setExistingPlacements(clustered);
+                })
+                .catch(err => console.error("Failed to fetch client orders", err));
+        }
+    }, [client]);
+
+    // Fetch Products (Re-implementing this as it's better practice)
+    useEffect(() => {
+        fetch(`${API_BASE_URL}/products`)
+            .then(res => res.json())
+            .then(data => {
+                if (data && data.length > 0) {
+                    setProducts(data);
+                }
+            })
+            .catch(err => console.log("Failed to fetch products, using mock", err));
+    }, []);
 
     // Sync data with parent
     useEffect(() => {
@@ -114,7 +176,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                     {isPacketDropdownOpen && (
                         <View style={styles.dropdownList}>
                             <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
-                                {SERVICE_PACKETS.map((packet, index) => (
+                                {products.map((packet, index) => (
                                     <Pressable
                                         key={packet.id}
                                         style={({ pressed }) => [
@@ -124,7 +186,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                                         onPress={() => handleSelectPacket(packet)}
                                     >
                                         <Text style={styles.dropdownItemText}>{packet.name}</Text>
-                                        {index < SERVICE_PACKETS.length - 1 && <View style={styles.divider} />}
+                                        {index < products.length - 1 && <View style={styles.divider} />}
                                     </Pressable>
                                 ))}
                             </ScrollView>
@@ -177,7 +239,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                     }
                 }}
                 initialLocation={location || undefined}
-                existingPlacements={EXISTING_PLACEMENTS}
+                existingPlacements={existingPlacements}
             />
 
             {/* --- CONTRACT DURATION --- */}
