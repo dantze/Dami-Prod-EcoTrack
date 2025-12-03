@@ -42,5 +42,39 @@ export const ClientService = {
         }
 
         return await response.json();
+    },
+
+    /**
+     * Creates a new order for a specific client.
+     * @param clientId The ID of the client.
+     * @param orderData The data for the new order.
+     */
+    createOrder: async (clientId: number, orderData: any) => {
+        const response = await fetch(`${API_BASE_URL}/clients/${clientId}/orders`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(orderData),
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'Failed to create order');
+        }
+
+        return await response.json();
+    },
+
+    /**
+     * Fetches all orders for a specific client.
+     * @param clientId The ID of the client.
+     */
+    getOrders: async (clientId: number) => {
+        const response = await fetch(`${API_BASE_URL}/clients/${clientId}/orders`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch orders');
+        }
+        return await response.json();
     }
 };

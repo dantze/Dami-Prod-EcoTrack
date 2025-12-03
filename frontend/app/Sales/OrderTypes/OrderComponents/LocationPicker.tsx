@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { StyleSheet, Text, View, Modal, Pressable, Dimensions } from 'react-native';
-import MapView, { Region, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Region, PROVIDER_GOOGLE, Marker } from 'react-native-maps';
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 
 interface Location {
@@ -8,9 +8,18 @@ interface Location {
     longitude: number;
 }
 
+interface ExistingPlacement {
+    id: number;
+    latitude: number;
+    longitude: number;
+    count: number;
+    name: string;
+}
+
 interface LocationPickerProps {
-    onLocationSelect: (location: Location) => void;
+    onLocationSelect: (location: Location, existingPlacementId?: number) => void;
     initialLocation?: Location;
+    existingPlacements?: ExistingPlacement[];
 }
 
 const { width, height } = Dimensions.get('window');
@@ -23,23 +32,78 @@ const DEFAULT_REGION = {
     longitudeDelta: 0.05,
 };
 
-const LocationPicker = ({ onLocationSelect, initialLocation }: LocationPickerProps) => {
+// Custom Map Style to remove POIs and simplify
+const MAP_STYLE = [
+    {
+        "featureType": "poi",
+        "stylers": [
+            { "visibility": "off" }
+        ]
+    },
+    {
+        "featureType": "road.highway",
+        "stylers": [
+            { "visibility": "simplified" }
+        ]
+    },
+    {
+        "featureType": "transit",
+        "stylers": [
+            { "visibility": "off" }
+        ]
+    }
+];
+
+const LocationPicker = ({ onLocationSelect, initialLocation, existingPlacements = [] }: LocationPickerProps) => {
     const [modalVisible, setModalVisible] = useState(false);
     const [region, setRegion] = useState<Region>(DEFAULT_REGION);
     const [selectedLocation, setSelectedLocation] = useState<Location | null>(initialLocation || null);
+    const [selectedExistingId, setSelectedExistingId] = useState<number | undefined>(undefined);
+    const mapRef = React.useRef<MapView>(null);
 
     const handleRegionChange = (newRegion: Region) => {
         setRegion(newRegion);
+        // If user moves map significantly, deselect existing marker to switch to "New Location" mode
+        if (selectedExistingId) {
+            // Optional: Logic to deselect if moved too far, but for now let's keep it manual or explicit
+        }
+    };
+
+    const handleMarkerPress = (placement: ExistingPlacement) => {
+        setSelectedExistingId(placement.id);
+        setSelectedLocation({ latitude: placement.latitude, longitude: placement.longitude });
+
+        // Animate map to center on marker
+        const newRegion = {
+            ...region,
+            latitude: placement.latitude,
+            longitude: placement.longitude,
+        };
+        setRegion(newRegion);
+        mapRef.current?.animateToRegion(newRegion, 500);
     };
 
     const confirmLocation = () => {
-        const location = {
-            latitude: region.latitude,
-            longitude: region.longitude,
-        };
-        setSelectedLocation(location);
-        onLocationSelect(location);
+        if (selectedExistingId) {
+            // User selected an existing cluster
+            const placement = existingPlacements.find(p => p.id === selectedExistingId);
+            if (placement) {
+                onLocationSelect({ latitude: placement.latitude, longitude: placement.longitude }, placement.id);
+            }
+        } else {
+            // User selected a new spot (center of map)
+            const location = {
+                latitude: region.latitude,
+                longitude: region.longitude,
+            };
+            setSelectedLocation(location);
+            onLocationSelect(location);
+        }
         setModalVisible(false);
+    };
+
+    const resetSelection = () => {
+        setSelectedExistingId(undefined);
     };
 
     return (
@@ -49,7 +113,9 @@ const LocationPicker = ({ onLocationSelect, initialLocation }: LocationPickerPro
                 <View style={[styles.placeholderBox, selectedLocation && styles.selectedBox]}>
                     {selectedLocation ? (
                         <Text style={styles.selectedText}>
-                            📍 Lat: {selectedLocation.latitude.toFixed(4)}, Long: {selectedLocation.longitude.toFixed(4)}
+                            {selectedExistingId
+                                ? `📍 Locație Existentă (ID: ${selectedExistingId})`
+                                : `📍 Lat: ${selectedLocation.latitude.toFixed(4)}, Long: ${selectedLocation.longitude.toFixed(4)}`}
                         </Text>
                     ) : (
                         <Text style={styles.placeholderText}>Apasă pentru a selecta locația</Text>
@@ -66,16 +132,36 @@ const LocationPicker = ({ onLocationSelect, initialLocation }: LocationPickerPro
             >
                 <View style={styles.modalContainer}>
                     <MapView
+                        ref={mapRef}
                         provider={PROVIDER_GOOGLE}
                         style={styles.map}
                         initialRegion={DEFAULT_REGION}
                         onRegionChangeComplete={handleRegionChange}
-                    />
+                        onPress={resetSelection} // Clicking map background resets to "New Location" mode
+                        customMapStyle={MAP_STYLE}
+                    >
+                        {existingPlacements.map((placement) => (
+                            <Marker
+                                key={placement.id}
+                                coordinate={{ latitude: placement.latitude, longitude: placement.longitude }}
+                                onPress={(e) => {
+                                    e.stopPropagation(); // Prevent map onPress
+                                    handleMarkerPress(placement);
+                                }}
+                            >
+                                <View style={[styles.clusterMarker, selectedExistingId === placement.id && styles.selectedCluster]}>
+                                    <Text style={styles.clusterText}>{placement.count}</Text>
+                                </View>
+                            </Marker>
+                        ))}
+                    </MapView>
 
-                    {/* Fixed Marker in Center */}
-                    <View style={styles.markerFixed}>
-                        <Ionicons name="location-sharp" size={48} color="#E53935" />
-                    </View>
+                    {/* Fixed Marker in Center (Only show if NO existing marker is selected) */}
+                    {!selectedExistingId && (
+                        <View style={styles.markerFixed}>
+                            <Ionicons name="location-sharp" size={48} color="#E53935" />
+                        </View>
+                    )}
 
                     {/* Header / Close Button */}
                     <View style={styles.header}>
@@ -88,9 +174,15 @@ const LocationPicker = ({ onLocationSelect, initialLocation }: LocationPickerPro
 
                     {/* Confirm Button */}
                     <View style={styles.footer}>
-                        <Text style={styles.hintText}>Trage harta pentru a poziționa pin-ul</Text>
+                        <Text style={styles.hintText}>
+                            {selectedExistingId
+                                ? "Locație existentă selectată. Apasă Confirmă."
+                                : "Trage harta pentru a poziționa pin-ul nou."}
+                        </Text>
                         <Pressable style={styles.confirmButton} onPress={confirmLocation}>
-                            <Text style={styles.confirmButtonText}>Confirmă Locația</Text>
+                            <Text style={styles.confirmButtonText}>
+                                {selectedExistingId ? "Adaugă aici (+1)" : "Confirmă Locația Nouă"}
+                            </Text>
                         </Pressable>
                     </View>
                 </View>
@@ -201,5 +293,23 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 18,
         fontWeight: 'bold',
+    },
+    // Cluster Marker Styles
+    clusterMarker: {
+        backgroundColor: '#2196F3',
+        minWidth: 30,
+        height: 30,
+        borderRadius: 15,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    selectedCluster: {
+        backgroundColor: '#FF9800', // Orange when selected
+        zIndex: 10,
+    },
+    clusterText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 12,
     },
 });
