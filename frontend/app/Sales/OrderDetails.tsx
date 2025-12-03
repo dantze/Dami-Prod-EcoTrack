@@ -5,6 +5,7 @@ import { AntDesign, Ionicons } from '@expo/vector-icons';
 import Amplasari from './OrderTypes/Amplasari';
 import Ridicari from './OrderTypes/Ridicari';
 import Igienizari from './OrderTypes/Igienizari';
+import { ClientService } from '../../services/ClientService';
 
 const ORDER_TYPES = ["Amplasari", "Ridicari", "Igienizari"];
 
@@ -149,18 +150,46 @@ const OrderDetails = () => {
                             styles.submitButton,
                             pressed && { opacity: 0.9 }
                         ]}
-                        onPress={() => {
+                        onPress={async () => {
                             const error = validateOrder();
                             if (error) {
                                 alert(error);
                                 return;
                             }
 
-                            // TODO: Handle form submission based on selectedType and child component state
-                            console.log("Submit Order Type:", selectedType);
-                            console.log("Order Data:", orderData);
-                            alert("Comanda a fost trimisă cu succes!");
-                            router.dismiss(2);
+                            if (selectedType === "Amplasari") {
+                                try {
+                                    const payload = {
+                                        orderType: selectedType,
+                                        product: { id: orderData.packet.id },
+                                        quantity: parseInt(orderData.quantity),
+                                        isIndefinite: orderData.isIndefinite,
+                                        durationDays: orderData.isIndefinite ? null : parseInt(orderData.duration),
+                                        startDate: orderData.startDate,
+                                        endDate: orderData.endDate,
+                                        locationCoordinates: orderData.location ? `${orderData.location.latitude},${orderData.location.longitude}` : null,
+                                        contact: orderData.contact,
+                                        igienizariPerMonth: parseInt(orderData.igienizari),
+                                        details: orderData.details
+                                    };
+
+                                    console.log("Sending Payload:", JSON.stringify(payload, null, 2));
+
+                                    const savedOrder = await ClientService.createOrder(client.id, payload);
+
+                                    alert("Comanda Amplasare salvată cu succes!");
+                                    console.log("Saved Order:", savedOrder);
+                                    router.dismiss(2);
+                                } catch (err: any) {
+                                    console.error("Error submitting order:", err);
+                                    alert("Eroare la salvarea comenzii: " + (err.message || "Eroare necunoscută"));
+                                }
+                            } else {
+                                // Other types (Ridicari, Igienizari) - just log for now
+                                console.log("Submit Order Type:", selectedType);
+                                console.log("Order Data:", orderData);
+                                alert(`Comanda de tip ${selectedType} nu este încă implementată complet.`);
+                            }
                         }}
                     >
                         <Text style={styles.submitButtonText}>Trimite Comanda</Text>

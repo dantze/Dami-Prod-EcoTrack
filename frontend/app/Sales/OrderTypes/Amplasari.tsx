@@ -93,7 +93,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
         <View style={styles.container}>
             <Text style={styles.title}>Formular Amplasări</Text>
 
-            {/* --- PACKET & QUANTITY --- */}
+            {/* --- PACKET & QUANTITY -- - */}
             <Text style={styles.label}>Pachet Servicii & Cantitate</Text>
             <View style={[styles.row, { zIndex: 300 }]}>
                 {/* Packet Dropdown */}
@@ -155,20 +155,22 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 </View>
             </View>
 
-            {/* Price Display */}
+            {/* Price Displa y */}
+
             {selectedPacket && (
                 <Text style={styles.priceText}>
                     Preț Total: <Text style={{ fontWeight: 'bold' }}>{selectedPacket.price * parseInt(quantity)} RON</Text>
                 </Text>
+
             )}
 
-            {/* --- LOCATION --- */}
+            {/* --- LOCATION -- - */}
             <LocationPicker
                 onLocationSelect={(loc) => setLocation(loc)}
                 initialLocation={location || undefined}
             />
 
-            {/* --- CONTRACT DURATION --- */}
+            {/* --- CONTRACT DURATION -- - */}
             <View style={{ marginTop: 15 }}>
                 <Text style={styles.label}>Durata Contract</Text>
                 <View style={styles.row}>
@@ -196,7 +198,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 </View>
             </View>
 
-            {/* --- DATA AMPLASARE --- */}
+            {/* --- DATA AMPLASARE -- - */}
             <DateSelector
                 onDateChange={(start, end) => {
                     setPlacementStartDate(start);
@@ -211,7 +213,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 }}
             />
 
-            {/* --- IGIENIZARI PE LUNA --- */}
+            {/* --- IGIENIZARI PE LUNA -- - */}
             <View style={{ marginTop: 15, zIndex: 200 }}>
                 <Text style={styles.label}>Igienizări pe lună</Text>
                 <View style={{ position: 'relative' }}>
@@ -242,7 +244,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 </View>
             </View>
 
-            {/* --- CONTACT SANTIER --- */}
+            {/* --- CONTACT SANTIER -- - */}
             <View style={{ marginTop: 15 }}>
                 <Text style={styles.label}>Contact Șantier</Text>
                 <TextInput
@@ -255,7 +257,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 />
             </View>
 
-            {/* --- DETALII SUPLIMENTARE --- */}
+            {/* --- DETALII SUPLIMENTARE -- - */}
             <View style={{ marginTop: 15 }}>
                 <Text style={styles.label}>Detalii Suplimentare</Text>
                 <TextInput
@@ -270,7 +272,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 />
             </View>
 
-        </View>
+        </ View>
     )
 }
 
