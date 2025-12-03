@@ -11,6 +11,12 @@ const SERVICE_PACKETS = Array.from({ length: 12 }, (_, i) => ({
     price: (i + 1) * 50 + 100
 }));
 
+const EXISTING_PLACEMENTS = [
+    { id: 101, latitude: 44.4268, longitude: 26.1025, count: 2, name: 'Santier A' },
+    { id: 102, latitude: 44.4300, longitude: 26.1100, count: 1, name: 'Santier B' },
+    { id: 103, latitude: 44.4200, longitude: 26.0900, count: 5, name: 'Santier C' },
+];
+
 const QUANTITY_OPTIONS = Array.from({ length: 20 }, (_, i) => (i + 1).toString());
 const IGIENIZARI_OPTIONS = Array.from({ length: 12 }, (_, i) => (i + 1).toString());
 
@@ -93,7 +99,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
         <View style={styles.container}>
             <Text style={styles.title}>Formular Amplasări</Text>
 
-            {/* --- PACKET & QUANTITY -- - */}
+            {/* --- PACKET & QUANTITY --- */}
             <Text style={styles.label}>Pachet Servicii & Cantitate</Text>
             <View style={[styles.row, { zIndex: 300 }]}>
                 {/* Packet Dropdown */}
@@ -155,22 +161,26 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 </View>
             </View>
 
-            {/* Price Displa y */}
-
+            {/* Price Display */}
             {selectedPacket && (
                 <Text style={styles.priceText}>
                     Preț Total: <Text style={{ fontWeight: 'bold' }}>{selectedPacket.price * parseInt(quantity)} RON</Text>
                 </Text>
-
             )}
 
-            {/* --- LOCATION -- - */}
+            {/* --- LOCATION --- */}
             <LocationPicker
-                onLocationSelect={(loc) => setLocation(loc)}
+                onLocationSelect={(loc, existingId) => {
+                    setLocation(loc);
+                    if (existingId) {
+                        console.log("Selected existing placement:", existingId);
+                    }
+                }}
                 initialLocation={location || undefined}
+                existingPlacements={EXISTING_PLACEMENTS}
             />
 
-            {/* --- CONTRACT DURATION -- - */}
+            {/* --- CONTRACT DURATION --- */}
             <View style={{ marginTop: 15 }}>
                 <Text style={styles.label}>Durata Contract</Text>
                 <View style={styles.row}>
@@ -198,7 +208,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 </View>
             </View>
 
-            {/* --- DATA AMPLASARE -- - */}
+            {/* --- DATA AMPLASARE --- */}
             <DateSelector
                 onDateChange={(start, end) => {
                     setPlacementStartDate(start);
@@ -213,7 +223,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 }}
             />
 
-            {/* --- IGIENIZARI PE LUNA -- - */}
+            {/* --- IGIENIZARI PE LUNA --- */}
             <View style={{ marginTop: 15, zIndex: 200 }}>
                 <Text style={styles.label}>Igienizări pe lună</Text>
                 <View style={{ position: 'relative' }}>
@@ -244,7 +254,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 </View>
             </View>
 
-            {/* --- CONTACT SANTIER -- - */}
+            {/* --- CONTACT SANTIER --- */}
             <View style={{ marginTop: 15 }}>
                 <Text style={styles.label}>Contact Șantier</Text>
                 <TextInput
@@ -257,7 +267,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 />
             </View>
 
-            {/* --- DETALII SUPLIMENTARE -- - */}
+            {/* --- DETALII SUPLIMENTARE --- */}
             <View style={{ marginTop: 15 }}>
                 <Text style={styles.label}>Detalii Suplimentare</Text>
                 <TextInput
@@ -272,7 +282,7 @@ const Amplasari = ({ client, onDataChange }: { client: any, onDataChange: (data:
                 />
             </View>
 
-        </ View>
+        </View>
     )
 }
 
