@@ -11,19 +11,16 @@ import jakarta.persistence.Table;
 @Table(name = "individual")
 public class Individual extends Client {
 
-    private String firstName;
-
-    private String lastName;
+    private String fullName;
 
     private String CNP;
 
     public Individual() {
     }
 
-    public Individual(String email, String phone, String address, String firstName, String lastName, String CNP) {
+    public Individual(String email, String phone, String address, String fullName, String CNP) {
         super(email, phone, address);
-        this.firstName = firstName;
-        this.lastName = lastName;
+        this.fullName = fullName;
         this.CNP = CNP;
     }
 
