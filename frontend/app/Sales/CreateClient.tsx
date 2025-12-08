@@ -37,6 +37,7 @@ const CreateClient = () => {
     const [selectedType, setSelectedType] = useState("Persoană fizică");
 
     // Form Data
+    const [fullName, setFullName] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
     const [address, setAddress] = useState('');
@@ -79,7 +80,8 @@ const CreateClient = () => {
             name: selectedType === "Firme" ? companyName : '',
 
             CUI: selectedType === "Firme" ? cui : '',
-            adminName: selectedType === "Firme" ? adminName : ''
+            adminName: selectedType === "Firme" ? adminName : '',
+            fullName: selectedType === "Persoană fizică" ? fullName : ''
         };
 
         console.log("Creating client with data:", clientData);
@@ -87,7 +89,7 @@ const CreateClient = () => {
         try {
             const data = await ClientService.createClient(clientData);
             console.log('Client created successfully:', data);
-            
+
             if (shouldCreateOrder && data) {
                 router.push({
                     pathname: '/Sales/OrderDetails',
@@ -142,6 +144,9 @@ const CreateClient = () => {
 
                     {/* --- FORM FIELDS --- */}
                     <View style={{ zIndex: 100, width: '100%', marginTop: 20 }}>
+                        {selectedType === "Persoană fizică" && (
+                            <InputField label="Nume Complet" value={fullName} onChangeText={setFullName} />
+                        )}
                         <InputField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
                         <InputField label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
                         <InputField label="Adresa" value={address} onChangeText={setAddress} />

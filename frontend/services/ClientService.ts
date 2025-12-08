@@ -10,6 +10,7 @@ export interface ClientData {
     name?: string; // For companies
     CUI?: string; // For companies
     adminName?: string; // For companies
+    fullName?: string; // For individuals
 }
 
 export const ClientService = {
