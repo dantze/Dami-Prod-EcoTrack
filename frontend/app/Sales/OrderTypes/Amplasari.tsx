@@ -6,15 +6,6 @@ import LocationPicker from './OrderComponents/LocationPicker';
 import { ClientService } from '../../../services/ClientService';
 import { API_BASE_URL } from '../../../constants/ApiConfig';
 
-// Mock Data (Service Packets can stay mock for now or be fetched, but user asked for client orders specifically)
-// Ideally we should fetch products too, but let's stick to the user's specific request about map points first.
-// Actually, earlier we did fetch products. Let's make sure we keep that if it was there.
-// Wait, looking at previous file content, SERVICE_PACKETS was mock data.
-// The user previously asked to fetch products, but then I reverted to mock data in step 408 because of syntax errors.
-// Let's re-implement product fetching if possible, OR just stick to the map request.
-// The user said "collect from each client their orders... and make those points on the map".
-// I will focus on the map points (client orders) now.
-
 const SERVICE_PACKETS = Array.from({ length: 12 }, (_, i) => ({
     id: i + 1,
     name: `Pachet servicii ${i + 1}`,

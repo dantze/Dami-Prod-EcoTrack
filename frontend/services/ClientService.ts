@@ -10,6 +10,7 @@ export interface ClientData {
     name?: string; // For companies
     CUI?: string; // For companies
     adminName?: string; // For companies
+    fullName?: string; // For individuals
 }
 
 export const ClientService = {
@@ -76,5 +77,43 @@ export const ClientService = {
             throw new Error('Failed to fetch orders');
         }
         return await response.json();
+    },
+
+    /**
+     * Uploads an ID photo for a specific client.
+     * @param clientId The ID of the client (backend ID).
+     * @param photoUri The local URI of the photo to upload.
+     */
+    uploadIdPhoto: async (clientId: number, photoUri: string) => {
+        // Create FormData
+        const formData = new FormData();
+
+        // Infer filename and type
+        const filename = photoUri.split('/').pop() || 'photo.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const type = match ? `image/${match[1]}` : 'image/jpeg';
+
+        // Append file
+        // @ts-ignore: React Native FormData expects an object with uri, name, type
+        formData.append('file', { uri: photoUri, name: filename, type });
+
+        console.log(`Uploading photo for client ${clientId} to ${API_BASE_URL}/${clientId}/idPhoto`);
+
+        const response = await fetch(`${API_BASE_URL}/${clientId}/idPhoto`, {
+            method: 'POST',
+            headers: {
+                // Content-Type header must NOT be set manually for FormData; fetch sets it with boundary
+                'Accept': 'application/json',
+            },
+            body: formData,
+        });
+
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(errText || 'Failed to upload photo');
+        }
+
+        // The endpoint returns a plain string, so use .text() instead of .json()
+        return await response.text();
     }
 };

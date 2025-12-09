@@ -29,7 +29,7 @@ public class ClientController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteClient(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteClient(@PathVariable("id") Long id) {
         clientService.deleteClient(id);
         return ResponseEntity.noContent().build();
     }

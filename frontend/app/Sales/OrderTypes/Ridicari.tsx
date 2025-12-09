@@ -118,7 +118,7 @@ const Ridicari = ({ client, onDataChange }: { client: any, onDataChange: (data: 
         };
 
         fetchAndGroupOrders();
-    }, [client]);
+    }, [client?.id]);
 
     const handleIncrement = (groupKey: string, maxCount: number) => {
         setPacketsToRemove(prev => {

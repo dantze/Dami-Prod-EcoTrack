@@ -9,8 +9,7 @@ type Client = {
     id: number;
     type: 'individual' | 'company';
     name: string; // For companies
-    firstName?: string; // For individuals (if separated, but based on CreateClient it seems mixed or just 'name' for company)
-    lastName?: string;
+    fullName?: string;
     email: string;
     phone: string;
     address: string;
@@ -54,13 +53,13 @@ const CreateOrder = () => {
         }
         const lowerQuery = searchQuery.toLowerCase();
         const filtered = clients.filter(client => {
-            // Adjust these fields based on your actual Client object structure
             const nameMatch = client.name ? client.name.toLowerCase().includes(lowerQuery) : false;
+            const fullNameMatch = client.fullName ? client.fullName.toLowerCase().includes(lowerQuery) : false;
             const emailMatch = client.email ? client.email.toLowerCase().includes(lowerQuery) : false;
             const phoneMatch = client.phone ? client.phone.includes(lowerQuery) : false;
             const cuiMatch = client.CUI ? client.CUI.toLowerCase().includes(lowerQuery) : false;
 
-            return nameMatch || emailMatch || phoneMatch || cuiMatch;
+            return nameMatch || fullNameMatch || emailMatch || phoneMatch || cuiMatch;
         });
         setFilteredClients(filtered);
     };
@@ -80,8 +79,7 @@ const CreateOrder = () => {
             >
                 <View style={styles.clientInfo}>
                     <Text style={styles.clientName}>
-                        {item.type === 'company' ? item.name : `Client Individual (ID: ${item.id})`}
-                        {/* Fallback for individual name if not explicit, usually email/phone is key */}
+                        {item.type === 'company' ? item.name : (item.fullName || item.email)}
                     </Text>
                     {item.type === 'company' && <Text style={styles.clientDetail}>CUI: {item.CUI}</Text>}
                     <Text style={styles.clientDetail}>{item.email}</Text>
@@ -138,7 +136,8 @@ const CreateOrder = () => {
                             params: { client: JSON.stringify(selectedClient) }
                         })}
                     >
-                        <Text style={styles.nextButtonText}>Continuă cu {selectedClient.type === 'company' ? selectedClient.name : selectedClient.email}</Text>
+                        <Text style={styles.nextButtonText}>Continuă cu acest client</Text>
+
                     </Pressable>
                 </View>
             )}
