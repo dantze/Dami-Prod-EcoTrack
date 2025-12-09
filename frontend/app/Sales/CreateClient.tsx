@@ -1,9 +1,10 @@
-import { StyleSheet, Text, View, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert } from 'react-native'
+import { StyleSheet, Text, View, Pressable, TextInput, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard, Alert, Image } from 'react-native'
 import React, { useState } from 'react'
 import { useRouter } from 'expo-router'
-import { AntDesign } from '@expo/vector-icons';
+import { AntDesign, Feather } from '@expo/vector-icons';
 import { API_BASE_URL } from '../../constants/ApiConfig';
 import { ClientService, ClientType } from '../../services/ClientService';
+import * as ImagePicker from 'expo-image-picker';
 
 const TIP_CLIENT = ["Persoană fizică", "Firme"];
 
@@ -42,6 +43,9 @@ const CreateClient = () => {
     const [phone, setPhone] = useState('');
     const [address, setAddress] = useState('');
 
+    // ID Photo State
+    const [idPhoto, setIdPhoto] = useState<string | null>(null);
+
     // Company specific fields
     const [companyName, setCompanyName] = useState('');
     const [cui, setCui] = useState('');
@@ -54,6 +58,38 @@ const CreateClient = () => {
     const handleSelectType = (type: string) => {
         setSelectedType(type);
         setIsDropdownOpen(false);
+    };
+
+    const pickImage = async () => {
+        // No permissions request is necessary for launching the image library
+        let result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 1,
+        });
+
+        if (!result.canceled) {
+            setIdPhoto(result.assets[0].uri);
+        }
+    };
+
+    const takePhoto = async () => {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+            Alert.alert('Permisiune necesară', 'Avem nevoie de permisiunea camerei pentru a face poze.');
+            return;
+        }
+
+        let result = await ImagePicker.launchCameraAsync({
+            allowsEditing: true,
+            aspect: [4, 3],
+            quality: 1,
+        });
+
+        if (!result.canceled) {
+            setIdPhoto(result.assets[0].uri);
+        }
     };
 
     const handleCreate = async (shouldCreateOrder = false) => {
@@ -89,6 +125,18 @@ const CreateClient = () => {
         try {
             const data = await ClientService.createClient(clientData);
             console.log('Client created successfully:', data);
+
+            // Upload Photo if idPhoto is present and client created successfully
+            if (idPhoto && data?.id && selectedType === "Persoană fizică") {
+                try {
+                    console.log(`Uploading photo for new client ID: ${data.id}`);
+                    await ClientService.uploadIdPhoto(data.id, idPhoto);
+                    console.log("Photo upload successful");
+                } catch (photoError) {
+                    console.error("Failed to upload photo:", photoError);
+                    Alert.alert("Eroare Buletin", "Clientul a fost creat, dar poza de buletin nu a putut fi încărcată.");
+                }
+            }
 
             if (shouldCreateOrder && data) {
                 router.push({
@@ -145,7 +193,39 @@ const CreateClient = () => {
                     {/* --- FORM FIELDS --- */}
                     <View style={{ zIndex: 100, width: '100%', marginTop: 20 }}>
                         {selectedType === "Persoană fizică" && (
-                            <InputField label="Nume Complet" value={fullName} onChangeText={setFullName} />
+                            <>
+                                <InputField label="Nume Complet" value={fullName} onChangeText={setFullName} />
+
+                                {/* Photo Upload Section */}
+                                <Text style={styles.label}>Buletin</Text>
+                                <View style={styles.uploadContainer}>
+                                    <View style={styles.dashedBox}>
+                                        {idPhoto ? (
+                                            <View style={{ alignItems: 'center', width: '100%' }}>
+                                                <Image source={{ uri: idPhoto }} style={styles.previewImage} resizeMode="contain" />
+                                                <Pressable onPress={() => setIdPhoto(null)} style={{ marginTop: 10 }}>
+                                                    <Text style={{ color: '#FF4444', fontWeight: 'bold' }}>Șterge imaginea</Text>
+                                                </Pressable>
+                                            </View>
+                                        ) : (
+                                            <Pressable onPress={pickImage} style={styles.uploadTouchArea}>
+                                                <Feather name="upload-cloud" size={50} color="#5A8DAB" />
+                                                <Text style={styles.uploadTitle}>Atingeți pentru a încărca ID-ul</Text>
+                                            </Pressable>
+                                        )}
+
+                                        <View style={styles.orRow}>
+                                            <View style={styles.line} />
+                                            <Text style={styles.orText}>sau</Text>
+                                            <View style={styles.line} />
+                                        </View>
+
+                                        <Pressable onPress={takePhoto} style={styles.cameraButtonSmall}>
+                                            <Text style={styles.cameraButtonTextSmall}>Deschide Camera</Text>
+                                        </Pressable>
+                                    </View>
+                                </View>
+                            </>
                         )}
                         <InputField label="Email" value={email} onChangeText={setEmail} keyboardType="email-address" />
                         <InputField label="Telefon" value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
@@ -288,6 +368,73 @@ const styles = StyleSheet.create({
     createButtonText: {
         color: '#FFFFFF',
         fontSize: 18,
+        fontWeight: 'bold',
+    },
+
+    // Photo Upload Styles
+    uploadContainer: {
+        width: '90%',
+        alignSelf: 'center',
+        marginBottom: 20,
+    },
+    dashedBox: {
+        borderWidth: 1.5,
+        borderColor: '#5A8DAB', // Or a slightly lighter color
+        borderStyle: 'dashed',
+        borderRadius: 15,
+        backgroundColor: '#1E3246', // Slightly lighter than background
+        padding: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    uploadTouchArea: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '100%',
+    },
+    uploadTitle: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginTop: 10,
+        textAlign: 'center',
+    },
+    uploadSubtext: {
+        color: '#A0A0A0',
+        fontSize: 12,
+        marginTop: 5,
+        textAlign: 'center',
+    },
+    previewImage: {
+        width: 200,
+        height: 120,
+        borderRadius: 10,
+    },
+    orRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        width: '100%',
+        marginVertical: 15,
+    },
+    line: {
+        flex: 1,
+        height: 1,
+        backgroundColor: '#5A8DAB',
+        opacity: 0.5,
+    },
+    orText: {
+        color: '#A0A0A0',
+        marginHorizontal: 10,
+        fontWeight: 'bold',
+    },
+    cameraButtonSmall: {
+        backgroundColor: '#5A8DAB',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 8,
+    },
+    cameraButtonTextSmall: {
+        color: '#FFFFFF',
         fontWeight: 'bold',
     },
 })

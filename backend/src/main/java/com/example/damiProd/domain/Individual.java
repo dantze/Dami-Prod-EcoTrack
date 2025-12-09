@@ -15,6 +15,9 @@ public class Individual extends Client {
 
     private String CNP;
 
+    // Stores the GCS URL of their ID photo
+    private String idPhotoUrl;
+
     public Individual() {
     }
 
