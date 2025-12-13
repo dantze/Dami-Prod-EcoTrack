@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View, Pressable, Image, ScrollView } from 'react-native'
 import React from 'react'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons';
 
 const mapImageSource = require('../../assets/images/harta_romania.png');
 
@@ -28,12 +29,30 @@ const Routes = () => {
         });
     };
 
+    const handleAddRoute = () => {
+        router.push('/Technical/CreateRoute');
+    };
+
     return (
         <View style={styles.container}>
 
             {/* Header */}
             <View style={styles.headerContainer}>
                 <Text style={styles.headerText}>{`Routes - ${zonaLabel}`}</Text>
+            </View>
+
+            {/* Static Add Route Button */}
+            <View style={styles.addButtonContainer}>
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.addRouteButton,
+                        pressed && styles.buttonPressed
+                    ]}
+                    onPress={handleAddRoute}
+                >
+                    <Ionicons name="add-circle-outline" size={24} color="#FFFFFF" style={{ marginRight: 8 }} />
+                    <Text style={styles.addButtonText}>Adaugă Rută</Text>
+                </Pressable>
             </View>
 
             <View style={styles.listContainer}>
@@ -92,6 +111,31 @@ const styles = StyleSheet.create({
         fontSize: 28,
         fontWeight: 'bold',
         textAlign: 'left',
+    },
+
+    addButtonContainer: {
+        paddingHorizontal: 20,
+        marginBottom: 20,
+        alignItems: 'center',
+    },
+    addRouteButton: {
+        width: 300,
+        height: 50,
+        backgroundColor: '#4CAF50',
+        borderRadius: 20,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        elevation: 5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+    },
+    addButtonText: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: 'bold',
     },
 
     listContainer: {
