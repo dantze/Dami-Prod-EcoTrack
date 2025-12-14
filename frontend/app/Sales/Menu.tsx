@@ -60,7 +60,9 @@ const Menu = () => {
                         styles.menuButton,
                         pressed && styles.buttonPressed
                     ]}
-                    onPress={() => console.log("Navigate to Map")}
+                    onPress={() => router.push({
+                        pathname: '/Sales/AllOrdersMap',
+                    })}
                 >
                     <Text style={styles.buttonText}>Harta</Text>
                 </Pressable>
