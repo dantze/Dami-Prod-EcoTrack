@@ -31,4 +31,8 @@ public class RouteService {
         return routeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ruta nu a fost găsită"));
     }
+
+    public List<Route> getRoutesByEmployeeId(Long employeeId) {
+        return routeRepository.findByEmployee_Id(employeeId);
+    }
 }

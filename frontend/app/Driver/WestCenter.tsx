@@ -7,12 +7,20 @@ const mapImageSource = require('../../assets/images/harta_romania.png');
 const WestCenter = () => {
     const router = useRouter();
 
+    const handleZonePress = (zone: string) => {
+        console.log(`Selected zone: ${zone}`);
+        router.push({
+            pathname: '/Driver/DriverRoutes',
+            params: { zone }
+        });
+    };
+
     return (
         <View style={styles.container}>
 
 
             <View style={styles.headerContainer}>
-                <Text style={styles.headerText}>Select Zone</Text>
+                <Text style={styles.headerText}>Selectează Zona</Text>
             </View>
 
 
@@ -23,7 +31,7 @@ const WestCenter = () => {
                         styles.zoneButton,
                         pressed && styles.buttonPressed
                     ]}
-                    onPress={() => console.log('West pressed')}
+                    onPress={() => handleZonePress('West')}
                 >
                     <Text style={styles.buttonText}>West</Text>
                 </Pressable>
@@ -37,7 +45,7 @@ const WestCenter = () => {
                         styles.zoneButton,
                         pressed && styles.buttonPressed
                     ]}
-                    onPress={() => console.log('Center pressed')}
+                    onPress={() => handleZonePress('Center')}
                 >
                     <Text style={styles.buttonText}>Center</Text>
                 </Pressable>
