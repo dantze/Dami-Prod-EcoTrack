@@ -1,30 +1,43 @@
-import { StyleSheet, Text, View, Pressable, Image, ScrollView } from 'react-native'
-import React from 'react'
-import { useRouter, useLocalSearchParams } from 'expo-router'
+import { StyleSheet, Text, View, Pressable, Image, ScrollView, ActivityIndicator } from 'react-native'
+import React, { useState, useCallback } from 'react'
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons';
+import { RouteDefinitionService, RouteDefinition } from '../../services/RouteDefinitionService';
 
 const mapImageSource = require('../../assets/images/harta_romania.png');
-
-// 2. Mock Data for Routes (Here you will put data from the database in the future)
-const ROUTES_DATA = [
-    { id: 1, name: 'Cluj 1' },
-    { id: 2, name: 'Cluj 2' },
-    { id: 3, name: 'Sibiu' },
-    { id: 4, name: 'Hunedoara' },
-];
 
 const Routes = () => {
     const router = useRouter();
     const { zona } = useLocalSearchParams<{ zona?: string }>();
     const zonaLabel = zona ?? 'Center';
+    const [routes, setRoutes] = useState<RouteDefinition[]>([]);
+    const [loading, setLoading] = useState(true);
 
-    const handleRoutePress = (route: any) => {
+    const fetchRoutes = async () => {
+        try {
+            setLoading(true);
+            const data = await RouteDefinitionService.getAllRouteDefinitions();
+            setRoutes(data);
+        } catch (error) {
+            console.error('Error fetching routes:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchRoutes();
+        }, [])
+    );
+
+    const handleRoutePress = (route: RouteDefinition) => {
         console.log("You selected route:", route.name);
 
         router.push({
-            pathname: "/Technical/Map", // or the correct path to the file above
+            pathname: "/Technical/Map",
             params: {
-                routeName: route.name // Send "Cluj 1" so we know what to filter
+                routeName: route.name
             }
         });
     };
@@ -56,25 +69,32 @@ const Routes = () => {
             </View>
 
             <View style={styles.listContainer}>
-                <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                    {ROUTES_DATA.map((item, index) => (
-                        <View key={item.id} style={styles.itemWrapper}>
+                {loading ? (
+                    <ActivityIndicator size="large" color="#ffffff" />
+                ) : (
+                    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+                        {routes.map((item, index) => (
+                            <View key={item.id} style={styles.itemWrapper}>
 
-                            <Pressable
-                                style={({ pressed }) => [
-                                    styles.routeButton,
-                                    pressed && styles.buttonPressed
-                                ]}
-                                onPress={() => handleRoutePress(item)}
-                            >
-                                <Text style={styles.buttonText}>{item.name}</Text>
-                            </Pressable>
+                                <Pressable
+                                    style={({ pressed }) => [
+                                        styles.routeButton,
+                                        pressed && styles.buttonPressed
+                                    ]}
+                                    onPress={() => handleRoutePress(item)}
+                                >
+                                    <View>
+                                        <Text style={styles.buttonText}>{item.name}</Text>
+                                        <Text style={styles.subtitleText}>{item.city}</Text>
+                                    </View>
+                                </Pressable>
 
-                            {index < ROUTES_DATA.length - 1 && <View style={styles.separator} />}
+                                {index < routes.length - 1 && <View style={styles.separator} />}
 
-                        </View>
-                    ))}
-                </ScrollView>
+                            </View>
+                        ))}
+                    </ScrollView>
+                )}
             </View>
 
             <View style={styles.footerContainer}>
@@ -171,6 +191,11 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 20,
         fontWeight: 'bold',
+    },
+    subtitleText: {
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 14,
+        marginTop: 4,
     },
 
     separator: {
