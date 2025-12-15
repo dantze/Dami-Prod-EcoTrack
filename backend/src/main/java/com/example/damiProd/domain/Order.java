@@ -46,6 +46,10 @@ public class Order {
     private Integer igienizariPerMonth;
     private String details;
 
+    @ManyToOne
+    @JoinColumn(name = "route_definition_id")
+    private RouteDefinition routeDefinition;
+
     public Order() {
     }
 

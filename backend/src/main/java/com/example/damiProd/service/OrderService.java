@@ -51,4 +51,21 @@ public class OrderService {
     public List<Order> getAllOrders() {
         return orderRepository.findAll();
     }
+
+    public Order getOrderById(Long orderId) {
+        return orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found with id: " + orderId));
+    }
+
+    public Order updateOrder(Long orderId, Order orderDetails) {
+        Order existingOrder = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Order not found with id: " + orderId));
+        
+        // Update routeDefinition if provided
+        if (orderDetails.getRouteDefinition() != null) {
+            existingOrder.setRouteDefinition(orderDetails.getRouteDefinition());
+        }
+        
+        return orderRepository.save(existingOrder);
+    }
 }
