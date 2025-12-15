@@ -33,4 +33,18 @@ public class RouteController {
         routeService.deleteRoute(id);
         return ResponseEntity.noContent().build();
     }
+
+    // Get a specific route by ID (with tasks)
+    @GetMapping("/{id}")
+    public ResponseEntity<Route> getRouteById(@PathVariable Long id) {
+        Route route = routeService.getRouteById(id);
+        return ResponseEntity.ok(route);
+    }
+
+    // Get all routes for a specific employee (driver)
+    @GetMapping("/employee/{employeeId}")
+    public ResponseEntity<List<Route>> getRoutesByEmployee(@PathVariable Long employeeId) {
+        List<Route> routes = routeService.getRoutesByEmployeeId(employeeId);
+        return ResponseEntity.ok(routes);
+    }
 }

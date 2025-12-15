@@ -1,5 +1,6 @@
 package com.example.damiProd.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -18,6 +19,7 @@ public class Employee {
     private String username;
 
     @Column(nullable = false)
+    @JsonIgnore
     private String password;
 
     private String fullName;
@@ -32,6 +34,7 @@ public class Employee {
     private Set<EmployeeRole> roles = new HashSet<>();
 
     @OneToMany(mappedBy = "employee", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<Route> routes = new ArrayList<>();
 
     // --- Constructori ---

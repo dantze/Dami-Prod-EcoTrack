@@ -1,5 +1,7 @@
 package com.example.damiProd.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -17,10 +19,23 @@ public class Route {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id", nullable = false)
+    @JsonIgnore
     private Employee employee;
 
     @OneToMany(mappedBy = "route", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnoreProperties("route")
     private List<Task> tasks = new ArrayList<>();
+    
+    // Transient field for JSON serialization
+    @Transient
+    public Long getEmployeeId() {
+        return employee != null ? employee.getId() : null;
+    }
+    
+    @Transient
+    public String getEmployeeName() {
+        return employee != null ? employee.getFullName() : null;
+    }
 
     // --- Constructori ---
     public Route() {}
