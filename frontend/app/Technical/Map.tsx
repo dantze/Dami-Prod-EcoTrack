@@ -39,9 +39,23 @@ const DARK_MAP_STYLE = [
     { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] }
 ];
 
+// --- 1.1 City Coordinates Mapping ---
+const CITY_COORDINATES: { [key: string]: { lat: number, long: number } } = {
+    'Arad': { lat: 46.1866, long: 21.3123 },
+    'București': { lat: 44.4268, long: 26.1025 },
+    'Cluj-Napoca': { lat: 46.7712, long: 23.6236 },
+    'Sibiu': { lat: 45.7983, long: 24.1256 },
+    'Timișoara': { lat: 45.7489, long: 21.2087 },
+    'Brașov': { lat: 45.6579, long: 25.6012 },
+    'Iași': { lat: 47.1585, long: 27.6014 },
+    'Constanța': { lat: 44.1792, long: 28.6383 },
+    'Oradea': { lat: 47.0465, long: 21.9189 },
+    'Craiova': { lat: 44.3302, long: 23.7949 },
+};
+
 const TaskMap = () => {
     const router = useRouter();
-    const { routeName } = useLocalSearchParams<{ routeName: string }>(); // Type the received parameter
+    const { routeName, city } = useLocalSearchParams<{ routeName: string, city?: string }>(); 
 
     // --- 3. MAIN FIX HERE ---
     // We tell it: "This is a list of TaskItem, which starts empty"
@@ -70,13 +84,33 @@ const TaskMap = () => {
         loadData();
     }, [routeName]);
 
-
-    const initialRegion = {
-        latitude: tasks.length > 0 ? tasks[0].lat : 46.7712,
-        longitude: tasks.length > 0 ? tasks[0].long : 23.6236,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
+    // Determine initial region based on CITY first, then tasks, then default (Cluj)
+    const getInitialRegion = () => {
+        if (city && CITY_COORDINATES[city]) {
+            return {
+                latitude: CITY_COORDINATES[city].lat,
+                longitude: CITY_COORDINATES[city].long,
+                latitudeDelta: 0.12, // Zoom level appropriate for a city
+                longitudeDelta: 0.12,
+            };
+        }
+        if (tasks.length > 0) {
+            return {
+                latitude: tasks[0].lat,
+                longitude: tasks[0].long,
+                latitudeDelta: 0.0922,
+                longitudeDelta: 0.0421,
+            };
+        }
+        return {
+            latitude: 46.7712,
+            longitude: 23.6236,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+        };
     };
+
+    const initialRegion = getInitialRegion();
 
     if (loading) {
         return (

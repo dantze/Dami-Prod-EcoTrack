@@ -37,7 +37,8 @@ const Routes = () => {
         router.push({
             pathname: "/Technical/Map",
             params: {
-                routeName: route.name
+                routeName: route.name,
+                city: route.city
             }
         });
     };
