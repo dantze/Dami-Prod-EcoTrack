@@ -1,11 +1,12 @@
 import { StyleSheet, Text, View, Pressable, ScrollView, KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from 'react-native'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { AntDesign, Ionicons } from '@expo/vector-icons';
 import Amplasari from './OrderTypes/Amplasari';
 import Ridicari from './OrderTypes/Ridicari';
 import Igienizari from './OrderTypes/Igienizari';
 import { ClientService } from '../../services/ClientService';
+import { RouteDefinitionService, RouteDefinition } from '../../services/RouteDefinitionService';
 
 const ORDER_TYPES = ["Amplasari", "Ridicari", "Igienizari"];
 
@@ -17,6 +18,17 @@ const OrderDetails = () => {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [selectedType, setSelectedType] = useState(ORDER_TYPES[0]);
     const [orderData, setOrderData] = useState<any>({});
+
+    // Route State
+    const [routes, setRoutes] = useState<RouteDefinition[]>([]);
+    const [selectedRoute, setSelectedRoute] = useState<RouteDefinition | null>(null);
+    const [isRouteDropdownOpen, setIsRouteDropdownOpen] = useState(false);
+
+    useEffect(() => {
+        RouteDefinitionService.getAllRouteDefinitions()
+            .then(data => setRoutes(data))
+            .catch(err => console.error("Failed to fetch routes", err));
+    }, []);
 
     const toggleDropdown = () => {
         setIsDropdownOpen(!isDropdownOpen);
@@ -46,6 +58,8 @@ const OrderDetails = () => {
     };
 
     const validateOrder = () => {
+        if (!selectedRoute) return "Selectați o rută.";
+
         if (selectedType === "Amplasari") {
             const { packet, quantity, isIndefinite, duration, startDate, endDate, location, contact, igienizari } = orderData;
             if (!packet) return "Selectați un pachet.";
@@ -110,6 +124,44 @@ const OrderDetails = () => {
                         {client.type === 'company' && <Text style={styles.clientDetail}>CUI: {client.CUI}</Text>}
                     </View>
 
+                    {/* Route Selection Dropdown */}
+                    <Text style={styles.sectionLabel}>Selectează Ruta</Text>
+                    <View style={[styles.dropdownWrapper, { zIndex: 300 }]}>
+                        <Pressable
+                            style={styles.dropdownButton}
+                            onPress={() => setIsRouteDropdownOpen(!isRouteDropdownOpen)}
+                        >
+                            <Text style={styles.dropdownButtonText}>
+                                {selectedRoute ? selectedRoute.name : "Alege o rută..."}
+                            </Text>
+                            <AntDesign name={isRouteDropdownOpen ? "up" : "down"} size={16} color="#16283C" />
+                        </Pressable>
+
+                        {isRouteDropdownOpen && (
+                            <View style={styles.dropdownList}>
+                                <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
+                                    {routes.map((route, index) => (
+                                        <Pressable
+                                            key={route.id}
+                                            style={({ pressed }) => [
+                                                styles.dropdownItem,
+                                                pressed && { backgroundColor: '#F5F5F5' }
+                                            ]}
+                                            onPress={() => {
+                                                setSelectedRoute(route);
+                                                setIsRouteDropdownOpen(false);
+                                            }}
+                                        >
+                                            <Text style={styles.dropdownItemText}>{route.name}</Text>
+                                            <Text style={{ fontSize: 12, color: '#888' }}>{route.city}</Text>
+                                            {index < routes.length - 1 && <View style={styles.divider} />}
+                                        </Pressable>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        )}
+                    </View>
+
                     {/* Dropdown for Order Type */}
                     <Text style={styles.sectionLabel}>Tip Comandă</Text>
                     <View style={[styles.dropdownWrapper, { zIndex: 200 }]}>
@@ -170,7 +222,8 @@ const OrderDetails = () => {
                                         locationCoordinates: orderData.location ? `${orderData.location.latitude},${orderData.location.longitude}` : null,
                                         contact: orderData.contact,
                                         igienizariPerMonth: parseInt(orderData.igienizari),
-                                        details: orderData.details
+                                        details: orderData.details,
+                                        routeDefinition: { id: selectedRoute!.id }
                                     };
 
                                     console.log("Sending Payload:", JSON.stringify(payload, null, 2));

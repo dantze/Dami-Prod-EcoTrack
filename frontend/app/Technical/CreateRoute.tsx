@@ -2,6 +2,7 @@ import { StyleSheet, Text, View, TextInput, Pressable, Alert, Modal, ScrollView 
 import React, { useState } from 'react'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons';
+import { RouteDefinitionService } from '../../services/RouteDefinitionService';
 
 // Mock data for cities
 const CITIES = [
@@ -23,7 +24,7 @@ const CreateRoute = () => {
     const [selectedCity, setSelectedCity] = useState('');
     const [dropdownVisible, setDropdownVisible] = useState(false);
 
-    const handleFinalize = () => {
+    const handleFinalize = async () => {
         if (!routeName.trim()) {
             Alert.alert('Eroare', 'Te rog introdu numele rutei.');
             return;
@@ -33,19 +34,26 @@ const CreateRoute = () => {
             return;
         }
 
-        // Here you would send the data to the backend
-        console.log('Creating route:', { name: routeName, city: selectedCity });
-        
-        Alert.alert(
-            'Succes',
-            `Ruta "${routeName}" în ${selectedCity} a fost creată!`,
-            [
-                {
-                    text: 'OK',
-                    onPress: () => router.back()
-                }
-            ]
-        );
+        try {
+            await RouteDefinitionService.createRouteDefinition({
+                name: routeName,
+                city: selectedCity
+            });
+            
+            Alert.alert(
+                'Succes',
+                `Ruta "${routeName}" în ${selectedCity} a fost creată!`,
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => router.back()
+                    }
+                ]
+            );
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Eroare', 'Nu s-a putut crea ruta. Te rog încearcă din nou.');
+        }
     };
 
     const handleCitySelect = (cityName: string) => {

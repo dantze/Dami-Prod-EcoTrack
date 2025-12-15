@@ -1,32 +1,9 @@
-import { StyleSheet, Text, View, Pressable, ScrollView, Image, Modal, Animated, PanResponder, Alert } from 'react-native'
-import React, { useState, useRef } from 'react'
+import { StyleSheet, Text, View, Pressable, ScrollView, Image, Modal, Animated, PanResponder, Alert, ActivityIndicator } from 'react-native'
+import React, { useState, useRef, useEffect } from 'react'
 import { useRouter, useLocalSearchParams } from 'expo-router'
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-
-// MOCK DATA TASK
-const FULL_DETAILS_MOCK = {
-    companyName: "Dansoft",
-    cui: "16530585",
-    registeredAddress: "Cluj-Napoca, Strada Udrei, nr.2",
-    administrator: "Daniel Pentru Dan",
-    phone: "0747963611",
-    email: "email@gmail.com",
-    package: "Armal Cabin (x2)",
-    price: "1499 lei",
-    location: "Strada Mihail Kogălniceanu, nr. 22",
-    duration: "14 days",
-    placementDate: "14/02/2025",
-    pickupDate: "29/02/2025",
-    sanitizations: "N/A",
-    contactResp: "07479123455",
-    additionalDetails: "N/A"
-};
-
-// MOCK DATA ROUTES (For Modal)
-const ROUTES_MOCK = [
-    "Cluj 1", "Cluj 2", "Dej", "Arad 1",
-    "Arad 2", "Hunedoara", "Sibiu", "Timișoara"
-];
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { OrderService } from '../../services/OrderService';
+import { RouteDefinitionService, RouteDefinition } from '../../services/RouteDefinitionService';
 
 type DetailRowProps = {
     label: string;
@@ -37,11 +14,43 @@ type DetailRowProps = {
 const OrderDetails = () => {
     const router = useRouter();
     const params = useLocalSearchParams();
-    const data = FULL_DETAILS_MOCK;
+    const orderId = params.id ? Number(params.id) : null;
 
+    const [order, setOrder] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [routes, setRoutes] = useState<RouteDefinition[]>([]);
+    
     // --- STATE FOR MODAL ---
     const [modalVisible, setModalVisible] = useState(false);
-    const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+    const [selectedRoute, setSelectedRoute] = useState<RouteDefinition | null>(null);
+
+    useEffect(() => {
+        if (orderId) {
+            fetchOrderDetails();
+            fetchRoutes();
+        }
+    }, [orderId]);
+
+    const fetchOrderDetails = async () => {
+        try {
+            const data = await OrderService.getOrderById(orderId!);
+            setOrder(data);
+        } catch (error) {
+            Alert.alert("Error", "Could not fetch order details.");
+            router.back();
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchRoutes = async () => {
+        try {
+            const data = await RouteDefinitionService.getAllRouteDefinitions();
+            setRoutes(data);
+        } catch (error) {
+            console.error("Failed to fetch routes", error);
+        }
+    };
 
     // --- DRAG & DROP LOGIC (ANIMATION) ---
     const pan = useRef(new Animated.ValueXY()).current;
@@ -53,7 +62,6 @@ const OrderDetails = () => {
                 { useNativeDriver: false }
             ),
             onPanResponderRelease: () => {
-                // When released, return to place (visual effect)
                 Animated.spring(pan, {
                     toValue: { x: 0, y: 0 },
                     useNativeDriver: false,
@@ -63,19 +71,23 @@ const OrderDetails = () => {
     ).current;
 
     // Route selection function
-    const handleSelectRoute = (route: string) => {
+    const handleSelectRoute = (route: RouteDefinition) => {
         setSelectedRoute(route);
     };
 
     // Finalize function
-    const handleFinalize = () => {
-        if (selectedRoute) {
-            setModalVisible(false);
-            Alert.alert("Success", `Order assigned to route ${selectedRoute}!`);
-            // Here you would update the database
-            router.back();
+    const handleFinalize = async () => {
+        if (selectedRoute && orderId) {
+            try {
+                await OrderService.updateOrder(orderId, { routeDefinition: { id: selectedRoute.id } });
+                setModalVisible(false);
+                Alert.alert("Success", `Order assigned to route ${selectedRoute.name}!`);
+                router.back();
+            } catch (error) {
+                Alert.alert("Error", "Failed to assign route.");
+            }
         } else {
-            Alert.alert("Attention", "Please select a route (drag or tap a box).");
+            Alert.alert("Attention", "Please select a route.");
         }
     };
 
@@ -84,40 +96,56 @@ const OrderDetails = () => {
         <View style={styles.rowContainer}>
             <Text style={styles.label}>{label}</Text>
             <Text style={[styles.value, isMultiline && styles.multilineValue]}>
-                {value}
+                {value || 'N/A'}
             </Text>
         </View>
     );
+
+    if (loading) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
+            </View>
+        );
+    }
+
+    if (!order) return null;
+
+    const clientName = order.client?.type === 'company' ? order.client?.companyName : order.client?.fullName;
+    const clientAddress = order.client?.address || order.locationCoordinates;
 
     return (
         <View style={styles.container}>
 
             <View style={styles.headerContainer}>
+                <Pressable onPress={() => router.back()} style={{ position: 'absolute', left: 20, top: 0 }}>
+                    <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                </Pressable>
                 <Text style={styles.headerText}>Order Details</Text>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
 
                 <View style={styles.detailsCard}>
-                    <DetailRow label="Company Name" value={data.companyName} />
-                    <DetailRow label="CUI" value={data.cui} />
-                    <DetailRow label="Registered Office Address" value={data.registeredAddress} isMultiline />
-                    <DetailRow label="Administrator Name" value={data.administrator} />
-                    <DetailRow label="Phone" value={data.phone} />
-                    <DetailRow label="Email" value={data.email} />
+                    <DetailRow label="Client Name" value={clientName} />
+                    <DetailRow label="Client Type" value={order.client?.type} />
+                     {order.client?.cui && <DetailRow label="CUI" value={order.client.cui} />}
+                    <DetailRow label="Address" value={clientAddress} isMultiline />
+                    
                     <View style={{ height: 10 }} />
-                    <DetailRow label="Service Package" value={data.package} />
-                    <DetailRow label="Price" value={data.price} />
+                    <DetailRow label="Product" value={order.product?.name} />
+                    <DetailRow label="Quantity" value={order.quantity?.toString()} />
+                    <DetailRow label="Type" value={order.orderType} />
+                    
                     <View style={{ height: 10 }} />
-                    <DetailRow label="Location" value={data.location} isMultiline />
-                    <DetailRow label="Contract Duration" value={data.duration} />
-                    <DetailRow label="Placement Date" value={data.placementDate} />
-                    <DetailRow label="Pickup Date" value={data.pickupDate} />
-                    <DetailRow label="Sanitizations" value={data.sanitizations} />
+                    <DetailRow label="Start Date" value={order.startDate} />
+                    <DetailRow label="End Date" value={order.endDate} />
+                    <DetailRow label="Duration" value={order.durationDays ? `${order.durationDays} days` : (order.isIndefinite ? 'Indefinite' : 'N/A')} />
+                    
                     <View style={{ height: 10 }} />
-                    <DetailRow label="Contact Person" value="" />
-                    <DetailRow label="Placement Resp." value={data.contactResp} />
-                    <DetailRow label="Additional Details" value={data.additionalDetails} />
+                    <DetailRow label="Contact" value={order.contact} />
+                    <DetailRow label="Assigned Route" value={order.routeDefinition?.name} />
+                    <DetailRow label="Details" value={order.details} isMultiline />
                 </View>
 
                 {/* OPEN MODAL BUTTON */}
@@ -147,7 +175,6 @@ const OrderDetails = () => {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
 
-                        {/* Modal Title (Optional, looks like space in image) */}
                         <View style={{ alignItems: 'flex-end', width: '100%', paddingRight: 10 }}>
                             <Ionicons name="information-circle" size={24} color="#16283C" />
                         </View>
@@ -160,11 +187,11 @@ const OrderDetails = () => {
                                 style={[
                                     styles.draggableBox,
                                     { transform: [{ translateX: pan.x }, { translateY: pan.y }] },
-                                    { zIndex: 999 } // To be above others
+                                    { zIndex: 999 }
                                 ]}
                                 {...panResponder.panHandlers}
                             >
-                                <Text style={styles.draggableTitle}>{data.companyName}</Text>
+                                <Text style={styles.draggableTitle} numberOfLines={1}>Order #{order.id}</Text>
                                 <View style={styles.draggableIcons}>
                                     <Ionicons name="location-sharp" size={24} color="#16283C" />
                                     <View style={{ width: 10 }} />
@@ -176,7 +203,7 @@ const OrderDetails = () => {
                             <Pressable
                                 style={[
                                     styles.finalizeButton,
-                                    !selectedRoute && styles.disabledButton // Gray if nothing selected
+                                    !selectedRoute && styles.disabledButton
                                 ]}
                                 onPress={handleFinalize}
                                 disabled={!selectedRoute}
@@ -188,26 +215,30 @@ const OrderDetails = () => {
 
                         {/* --- GRID SECTION (ROUTES) --- */}
                         <View style={styles.gridContainer}>
-                            {ROUTES_MOCK.map((route, index) => (
-                                <Pressable
-                                    key={index}
-                                    style={[
-                                        styles.dropZone,
-                                        selectedRoute === route && styles.activeDropZone // Style when selected
-                                    ]}
-                                    onPress={() => handleSelectRoute(route)}
-                                >
-                                    <Text style={[
-                                        styles.dropZoneText,
-                                        selectedRoute === route && styles.activeDropZoneText
-                                    ]}>
-                                        {route}
-                                    </Text>
-                                </Pressable>
-                            ))}
+                            {routes.length > 0 ? (
+                                routes.map((route, index) => (
+                                    <Pressable
+                                        key={route.id}
+                                        style={[
+                                            styles.dropZone,
+                                            selectedRoute?.id === route.id && styles.activeDropZone
+                                        ]}
+                                        onPress={() => handleSelectRoute(route)}
+                                    >
+                                        <Text style={[
+                                            styles.dropZoneText,
+                                            selectedRoute?.id === route.id && styles.activeDropZoneText
+                                        ]}>
+                                            {route.name}
+                                        </Text>
+                                        <Text style={{ fontSize: 10, color: selectedRoute?.id === route.id ? 'white' : '#666' }}>{route.city}</Text>
+                                    </Pressable>
+                                ))
+                            ) : (
+                                <Text>No routes available.</Text>
+                            )}
                         </View>
 
-                        {/* Close Modal Button (for UX) */}
                         <Pressable
                             style={styles.closeModalButton}
                             onPress={() => setModalVisible(false)}
