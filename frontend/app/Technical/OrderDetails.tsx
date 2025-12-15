@@ -34,9 +34,11 @@ const OrderDetails = () => {
     const fetchOrderDetails = async () => {
         try {
             const data = await OrderService.getOrderById(orderId!);
+            console.log("Fetched Order Details:", JSON.stringify(data, null, 2));
             setOrder(data);
-        } catch (error) {
-            Alert.alert("Error", "Could not fetch order details.");
+        } catch (error: any) {
+            console.error("Fetch order error:", error);
+            Alert.alert("Error", `Could not fetch order details: ${error.message}`);
             router.back();
         } finally {
             setLoading(false);
@@ -54,6 +56,9 @@ const OrderDetails = () => {
 
     // --- DRAG & DROP LOGIC (ANIMATION) ---
     const pan = useRef(new Animated.ValueXY()).current;
+    
+    // ... existing PanResponder code ...
+
     const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
@@ -111,7 +116,8 @@ const OrderDetails = () => {
 
     if (!order) return null;
 
-    const clientName = order.client?.type === 'company' ? order.client?.companyName : order.client?.fullName;
+    // Updated here: use 'name' instead of 'companyName'
+    const clientName = order.client?.type === 'company' ? order.client?.name : order.client?.fullName;
     const clientAddress = order.client?.address || order.locationCoordinates;
 
     return (

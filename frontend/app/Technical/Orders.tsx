@@ -29,7 +29,7 @@ type Order = {
         email?: string;
         phone?: string;
         type?: string;
-        companyName?: string;
+        name?: string; // Changed from companyName to name
     };
 };
 
@@ -53,7 +53,7 @@ const Orders = () => {
             }
             const data: Order[] = await response.json();
             console.log('Fetched orders:', data.length);
-            console.log('First order:', JSON.stringify(data[0], null, 2));
+            console.log('First order:', JSON.stringify(data[0], null, 2)); 
             setOrders(data);
         } catch (error) {
             console.error("Error fetching orders:", error);
@@ -87,9 +87,9 @@ const Orders = () => {
             if (order.client.fullName) {
                 return order.client.fullName;
             }
-            // Check for companyName (for company clients)
-            if (order.client.companyName) {
-                return order.client.companyName;
+            // Check for name (for company clients)
+            if (order.client.name) {
+                return order.client.name;
             }
         }
         return 'Client necunoscut';

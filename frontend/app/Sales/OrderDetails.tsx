@@ -6,7 +6,7 @@ import Amplasari from './OrderTypes/Amplasari';
 import Ridicari from './OrderTypes/Ridicari';
 import Igienizari from './OrderTypes/Igienizari';
 import { ClientService } from '../../services/ClientService';
-import { RouteDefinitionService, RouteDefinition } from '../../services/RouteDefinitionService';
+
 
 const ORDER_TYPES = ["Amplasari", "Ridicari", "Igienizari"];
 
@@ -20,15 +20,7 @@ const OrderDetails = () => {
     const [orderData, setOrderData] = useState<any>({});
 
     // Route State
-    const [routes, setRoutes] = useState<RouteDefinition[]>([]);
-    const [selectedRoute, setSelectedRoute] = useState<RouteDefinition | null>(null);
-    const [isRouteDropdownOpen, setIsRouteDropdownOpen] = useState(false);
 
-    useEffect(() => {
-        RouteDefinitionService.getAllRouteDefinitions()
-            .then(data => setRoutes(data))
-            .catch(err => console.error("Failed to fetch routes", err));
-    }, []);
 
     const toggleDropdown = () => {
         setIsDropdownOpen(!isDropdownOpen);
@@ -58,7 +50,7 @@ const OrderDetails = () => {
     };
 
     const validateOrder = () => {
-        if (!selectedRoute) return "Selectați o rută.";
+
 
         if (selectedType === "Amplasari") {
             const { packet, quantity, isIndefinite, duration, startDate, endDate, location, contact, igienizari } = orderData;
@@ -124,43 +116,7 @@ const OrderDetails = () => {
                         {client.type === 'company' && <Text style={styles.clientDetail}>CUI: {client.CUI}</Text>}
                     </View>
 
-                    {/* Route Selection Dropdown */}
-                    <Text style={styles.sectionLabel}>Selectează Ruta</Text>
-                    <View style={[styles.dropdownWrapper, { zIndex: 300 }]}>
-                        <Pressable
-                            style={styles.dropdownButton}
-                            onPress={() => setIsRouteDropdownOpen(!isRouteDropdownOpen)}
-                        >
-                            <Text style={styles.dropdownButtonText}>
-                                {selectedRoute ? selectedRoute.name : "Alege o rută..."}
-                            </Text>
-                            <AntDesign name={isRouteDropdownOpen ? "up" : "down"} size={16} color="#16283C" />
-                        </Pressable>
 
-                        {isRouteDropdownOpen && (
-                            <View style={styles.dropdownList}>
-                                <ScrollView nestedScrollEnabled style={{ maxHeight: 200 }} showsVerticalScrollIndicator={false}>
-                                    {routes.map((route, index) => (
-                                        <Pressable
-                                            key={route.id}
-                                            style={({ pressed }) => [
-                                                styles.dropdownItem,
-                                                pressed && { backgroundColor: '#F5F5F5' }
-                                            ]}
-                                            onPress={() => {
-                                                setSelectedRoute(route);
-                                                setIsRouteDropdownOpen(false);
-                                            }}
-                                        >
-                                            <Text style={styles.dropdownItemText}>{route.name}</Text>
-                                            <Text style={{ fontSize: 12, color: '#888' }}>{route.city}</Text>
-                                            {index < routes.length - 1 && <View style={styles.divider} />}
-                                        </Pressable>
-                                    ))}
-                                </ScrollView>
-                            </View>
-                        )}
-                    </View>
 
                     {/* Dropdown for Order Type */}
                     <Text style={styles.sectionLabel}>Tip Comandă</Text>
@@ -223,7 +179,7 @@ const OrderDetails = () => {
                                         contact: orderData.contact,
                                         igienizariPerMonth: parseInt(orderData.igienizari),
                                         details: orderData.details,
-                                        routeDefinition: { id: selectedRoute!.id }
+
                                     };
 
                                     console.log("Sending Payload:", JSON.stringify(payload, null, 2));
