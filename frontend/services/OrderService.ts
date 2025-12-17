@@ -38,5 +38,16 @@ export const OrderService = {
             console.error('Error updating order:', error);
             throw error;
         }
+    },
+
+    getOrdersByRoute: async (routeId: number) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/route-definitions/${routeId}/orders`);
+            if (!response.ok) throw new Error('Failed to fetch route orders');
+            return await response.json();
+        } catch (error) {
+            console.error('Error fetching route orders:', error);
+            throw error;
+        }
     }
 };

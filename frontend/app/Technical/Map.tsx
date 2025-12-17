@@ -1,31 +1,19 @@
 import { StyleSheet, Text, View, Pressable, Dimensions, ActivityIndicator } from 'react-native'
 import React, { useState, useEffect } from 'react'
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps'
+import MapView, { Marker, Callout, PROVIDER_GOOGLE } from 'react-native-maps'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { OrderService } from '../../services/OrderService';
 
-// --- 1. DEFINE DATA TYPE (Schema) ---
-type TaskItem = {
+// --- Order placement type for map display ---
+type OrderPlacement = {
     id: number;
-    routeId: string;
-    lat: number;
-    long: number;
-    title: string;
-    color: string;
+    latitude: number;
+    longitude: number;
+    count: number;
+    name: string;
+    clientName: string;
 };
-
-// --- 2. APPLY TYPE TO MOCK DATA ---
-const ALL_TASKS_MOCK: TaskItem[] = [
-    // Tasks for route 'Cluj 1'
-    { id: 1, routeId: 'Cluj 1', lat: 46.7712, long: 23.6236, title: 'Task 1', color: '#F4D03F' },
-    { id: 2, routeId: 'Cluj 1', lat: 46.7750, long: 23.6100, title: 'Task 2', color: '#F4D03F' },
-
-    // Tasks for route 'Cluj 2'
-    { id: 3, routeId: 'Cluj 2', lat: 46.7600, long: 23.6000, title: 'Task A', color: '#EB984E' },
-
-    // Tasks for route 'Sibiu'
-    { id: 4, routeId: 'Sibiu', lat: 45.7983, long: 24.1256, title: 'Sibiu Center', color: '#5DADE2' },
-];
 
 // Dark Mode Style
 const DARK_MAP_STYLE = [
@@ -39,7 +27,7 @@ const DARK_MAP_STYLE = [
     { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#17263c" }] }
 ];
 
-// --- 1.1 City Coordinates Mapping ---
+// --- City Coordinates Mapping ---
 const CITY_COORDINATES: { [key: string]: { lat: number, long: number } } = {
     'Arad': { lat: 46.1866, long: 21.3123 },
     'București': { lat: 44.4268, long: 26.1025 },
@@ -55,11 +43,9 @@ const CITY_COORDINATES: { [key: string]: { lat: number, long: number } } = {
 
 const TaskMap = () => {
     const router = useRouter();
-    const { routeName, city } = useLocalSearchParams<{ routeName: string, city?: string }>(); 
+    const { routeId, routeName, city } = useLocalSearchParams<{ routeId?: string, routeName: string, city?: string }>(); 
 
-    // --- 3. MAIN FIX HERE ---
-    // We tell it: "This is a list of TaskItem, which starts empty"
-    const [tasks, setTasks] = useState<TaskItem[]>([]);
+    const [placements, setPlacements] = useState<OrderPlacement[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -67,37 +53,74 @@ const TaskMap = () => {
             try {
                 setLoading(true);
 
-                // 🗄️ DATABASE: Here you will write the real code.
-                // const { data, error } = await supabase...
+                if (routeId) {
+                    // Fetch real orders for this route
+                    const orders = await OrderService.getOrdersByRoute(Number(routeId));
+                    console.log('Fetched orders for route:', orders.length);
 
-                const filteredData = ALL_TASKS_MOCK.filter(task => task.routeId === routeName);
+                    // Transform orders to placements (same logic as AllOrdersMap.tsx)
+                    const rawPlacements = orders
+                        .filter((o: any) => o.locationCoordinates && o.locationCoordinates.includes(','))
+                        .map((o: any) => {
+                            const parts = o.locationCoordinates.split(',');
+                            const clientName = o.client?.type === 'company' 
+                                ? o.client?.name 
+                                : o.client?.fullName || 'Client necunoscut';
+                            return {
+                                id: o.id,
+                                latitude: parseFloat(parts[0]),
+                                longitude: parseFloat(parts[1]),
+                                count: o.quantity || 1,
+                                name: o.product?.name || 'Comanda #' + o.id,
+                                clientName: clientName
+                            };
+                        });
 
-                setTasks(filteredData);
+                    // Simple Clustering Logic (same as AllOrdersMap.tsx)
+                    const clustered: OrderPlacement[] = [];
+                    const THRESHOLD = 0.0002; // Approx 20-30 meters
+
+                    rawPlacements.forEach((p: any) => {
+                        const existing = clustered.find(c =>
+                            Math.abs(c.latitude - p.latitude) < THRESHOLD &&
+                            Math.abs(c.longitude - p.longitude) < THRESHOLD
+                        );
+
+                        if (existing) {
+                            existing.count += p.count;
+                        } else {
+                            clustered.push({ ...p });
+                        }
+                    });
+
+                    console.log('Clustered placements:', clustered.length);
+                    setPlacements(clustered);
+                }
 
             } catch (error) {
-                console.error("Error loading:", error);
+                console.error("Error loading orders:", error);
             } finally {
                 setLoading(false);
             }
         };
 
         loadData();
-    }, [routeName]);
+    }, [routeId]);
 
-    // Determine initial region based on CITY first, then tasks, then default (Cluj)
+    // Determine initial region based on CITY first, then placements, then default (Cluj)
     const getInitialRegion = () => {
         if (city && CITY_COORDINATES[city]) {
             return {
                 latitude: CITY_COORDINATES[city].lat,
                 longitude: CITY_COORDINATES[city].long,
-                latitudeDelta: 0.12, // Zoom level appropriate for a city
+                latitudeDelta: 0.12,
                 longitudeDelta: 0.12,
             };
         }
-        if (tasks.length > 0) {
+        if (placements.length > 0) {
             return {
-                latitude: tasks[0].lat,
-                longitude: tasks[0].long,
+                latitude: placements[0].latitude,
+                longitude: placements[0].longitude,
                 latitudeDelta: 0.0922,
                 longitudeDelta: 0.0421,
             };
@@ -119,7 +142,7 @@ const TaskMap = () => {
             </View>
         );
     }
-    console.log("key is ---- :", process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY)
+
     return (
         <View style={styles.container}>
 
@@ -129,14 +152,28 @@ const TaskMap = () => {
                 customMapStyle={DARK_MAP_STYLE}
                 initialRegion={initialRegion}
             >
-                {tasks.map((marker) => (
+                {/* Render order markers with cluster styling (same as AllOrdersMap.tsx) */}
+                {placements.map((placement) => (
                     <Marker
-                        key={marker.id}
-                        coordinate={{ latitude: marker.lat, longitude: marker.long }}
-                        title={marker.title}
-                        description={`Task for ${routeName}`}
-                        pinColor={marker.color}
-                    />
+                        key={placement.id}
+                        coordinate={{ 
+                            latitude: placement.latitude, 
+                            longitude: placement.longitude 
+                        }}
+                    >
+                        <View style={styles.clusterMarker}>
+                            <Text style={styles.clusterText}>{placement.count}</Text>
+                        </View>
+                        <Callout>
+                            <View style={styles.calloutContainer}>
+                                <Text style={styles.calloutTitle}>
+                                    {placement.count} {placement.count === 1 ? 'Comandă' : 'Comenzi'}
+                                </Text>
+                                <Text style={styles.calloutText}>{placement.name}</Text>
+                                <Text style={styles.calloutText}>{placement.clientName}</Text>
+                            </View>
+                        </Callout>
+                    </Marker>
                 ))}
             </MapView>
 
@@ -144,9 +181,11 @@ const TaskMap = () => {
             <View style={styles.legendContainer}>
                 <View style={styles.legendItem}>
                     <Text style={styles.legendText}>{routeName}</Text>
-                    {/* We use '?' (optional chaining) because tasks[0] might be undefined if list is empty */}
-                    <Ionicons name="location-sharp" size={20} color={tasks[0]?.color || '#F4D03F'} />
+                    <Ionicons name="location-sharp" size={20} color="#2196F3" />
                 </View>
+                <Text style={styles.orderCountText}>
+                    {placements.reduce((sum, p) => sum + p.count, 0)} comenzi
+                </Text>
             </View>
 
             {/* Bottom Bar */}
@@ -158,8 +197,8 @@ const TaskMap = () => {
                 <Pressable
                     style={styles.navItem}
                     onPress={() => router.push({
-                        pathname: "/Technical/RouteTasks", // Name of your new file
-                        params: { routeName: routeName } // Send route name forward
+                        pathname: "/Technical/RouteTasks",
+                        params: { routeName: routeName }
                     })}
                 >
                     <MaterialCommunityIcons name="map-marker-radius" size={30} color="white" />
@@ -185,10 +224,11 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 60,
         right: 20,
-        backgroundColor: 'rgba(22, 40, 60, 0.8)',
+        backgroundColor: 'rgba(22, 40, 60, 0.9)',
         borderRadius: 15,
-        padding: 10,
+        padding: 12,
         zIndex: 10,
+        alignItems: 'center',
     },
     legendItem: {
         flexDirection: 'row',
@@ -199,7 +239,13 @@ const styles = StyleSheet.create({
     legendText: {
         color: 'white',
         fontWeight: 'bold',
-        marginRight: 5,
+        marginRight: 8,
+        fontSize: 16,
+    },
+    orderCountText: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 12,
+        marginTop: 4,
     },
     bottomBar: {
         position: 'absolute',
@@ -222,5 +268,35 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-    }
+    },
+    // Cluster Marker Styles (same as AllOrdersMap.tsx)
+    clusterMarker: {
+        backgroundColor: '#2196F3',
+        minWidth: 30,
+        height: 30,
+        borderRadius: 15,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: 'white',
+    },
+    clusterText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 12,
+    },
+    calloutContainer: {
+        width: 200,
+        padding: 10,
+    },
+    calloutTitle: {
+        fontWeight: 'bold',
+        fontSize: 14,
+        marginBottom: 5,
+    },
+    calloutText: {
+        fontSize: 12,
+        color: '#555',
+        marginBottom: 2,
+    },
 })

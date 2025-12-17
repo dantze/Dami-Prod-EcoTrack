@@ -68,4 +68,8 @@ public class OrderService {
         
         return orderRepository.save(existingOrder);
     }
+
+    public List<Order> getOrdersByRoute(Long routeDefinitionId) {
+        return orderRepository.findByRouteDefinitionId(routeDefinitionId);
+    }
 }
