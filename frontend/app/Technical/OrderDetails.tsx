@@ -116,8 +116,10 @@ const OrderDetails = () => {
 
     if (!order) return null;
 
-    // Updated here: use 'name' instead of 'companyName'
-    const clientName = order.client?.type === 'company' ? order.client?.name : order.client?.fullName;
+    // Updated here: use 'name' instead of 'companyName', with email fallback
+    const clientName = order.client?.type === 'company' 
+        ? (order.client?.name || order.client?.email || 'N/A')
+        : (order.client?.fullName || order.client?.email || 'N/A');
     const clientAddress = order.client?.address || order.locationCoordinates;
 
     return (
