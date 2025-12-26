@@ -49,11 +49,11 @@ public class OrderService {
         orderRepository.deleteById(orderId);
     }
     public List<Order> getAllOrders() {
-        return orderRepository.findAll();
+        return orderRepository.findAllWithClientAndProduct();
     }
 
     public Order getOrderById(Long orderId) {
-        return orderRepository.findById(orderId)
+        return orderRepository.findByIdWithClientAndProduct(orderId)
                 .orElseThrow(() -> new RuntimeException("Order not found with id: " + orderId));
     }
 
@@ -67,5 +67,9 @@ public class OrderService {
         }
         
         return orderRepository.save(existingOrder);
+    }
+
+    public List<Order> getOrdersByRoute(Long routeDefinitionId) {
+        return orderRepository.findByRouteDefinitionId(routeDefinitionId);
     }
 }

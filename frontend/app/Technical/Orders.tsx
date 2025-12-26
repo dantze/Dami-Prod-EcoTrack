@@ -91,6 +91,10 @@ const Orders = () => {
             if (order.client.name) {
                 return order.client.name;
             }
+            // Fallback to email if name fields are missing
+            if (order.client.email) {
+                return order.client.email;
+            }
         }
         return 'Client necunoscut';
     };
