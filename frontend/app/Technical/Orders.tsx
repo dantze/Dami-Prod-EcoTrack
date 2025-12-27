@@ -3,13 +3,14 @@ import React, { useEffect, useState } from 'react'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../../constants/ApiConfig';
+import { TaskService } from '../../services/TaskService';
 
 type Order = {
     id: number;
-    orderType: string;  // Changed from 'type'
+    orderType: string;
     quantity: number;
     locationCoordinates: string;
-    startDate: string;  // Changed from 'scheduledDate'
+    startDate: string;
     endDate: string;
     details: string;
     contact: string;
@@ -29,9 +30,12 @@ type Order = {
         email?: string;
         phone?: string;
         type?: string;
-        name?: string; // Changed from companyName to name
+        name?: string;
     };
 };
+
+// Track which orders have associated tasks
+type OrderTaskMap = { [orderId: number]: boolean };
 
 const Orders = () => {
     const { zona } = useLocalSearchParams<{ zona?: string }>();
@@ -40,10 +44,18 @@ const Orders = () => {
 
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
+    const [orderTaskStatus, setOrderTaskStatus] = useState<OrderTaskMap>({});
 
     useEffect(() => {
         fetchOrders();
     }, []);
+    
+    // Check task status for all orders after they're loaded
+    useEffect(() => {
+        if (orders.length > 0) {
+            checkAllOrderTaskStatus();
+        }
+    }, [orders]);
 
     const fetchOrders = async () => {
         try {
@@ -53,13 +65,31 @@ const Orders = () => {
             }
             const data: Order[] = await response.json();
             console.log('Fetched orders:', data.length);
-            console.log('First order:', JSON.stringify(data[0], null, 2)); 
             setOrders(data);
         } catch (error) {
             console.error("Error fetching orders:", error);
         } finally {
             setLoading(false);
         }
+    };
+    
+    // Check task status for all orders
+    const checkAllOrderTaskStatus = async () => {
+        const statusMap: OrderTaskMap = {};
+        
+        // Check each order in parallel
+        await Promise.all(
+            orders.map(async (order) => {
+                try {
+                    const status = await TaskService.checkOrderHasTask(order.id);
+                    statusMap[order.id] = status.hasTask;
+                } catch (error) {
+                    statusMap[order.id] = false;
+                }
+            })
+        );
+        
+        setOrderTaskStatus(statusMap);
     };
 
     // Format date from ISO string or any date format
@@ -160,6 +190,8 @@ const Orders = () => {
                 ) : (
                     orders.map((order) => {
                         const { month, day } = formatDate(order.startDate);
+                        const hasTask = orderTaskStatus[order.id] || false;
+                        
                         return (
                             <Pressable
                                 key={order.id}
@@ -170,13 +202,28 @@ const Orders = () => {
                                 onPress={() => handleCardPress(order)}
                             >
                                 <View style={styles.cardInfo}>
-                                    <Text style={styles.clientName}>{getClientName(order)}</Text>
+                                    <View style={styles.clientRow}>
+                                        <Text style={styles.clientName}>{getClientName(order)}</Text>
+                                        {hasTask && (
+                                            <View style={styles.assignedBadge}>
+                                                <Ionicons name="checkmark-circle" size={14} color="#2ECC71" />
+                                                <Text style={styles.assignedBadgeText}>Atribuită</Text>
+                                            </View>
+                                        )}
+                                    </View>
                                     <Text style={styles.actionText}>{getActionText(order)}</Text>
 
                                     <View style={styles.addressContainer}>
                                         <Ionicons name="location-sharp" size={14} color="#16283C" style={{ marginRight: 4 }} />
                                         <Text style={styles.addressText} numberOfLines={1}>
                                             {getLocationText(order)}
+                                        </Text>
+                                    </View>
+                                    
+                                    {/* Status indicator */}
+                                    <View style={[styles.statusIndicator, hasTask ? styles.statusAssigned : styles.statusPending]}>
+                                        <Text style={styles.statusText}>
+                                            {hasTask ? 'Rută atribuită' : 'Neatribuită'}
                                         </Text>
                                     </View>
                                 </View>
@@ -265,11 +312,31 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingRight: 10,
     },
+    clientRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        marginBottom: 4,
+    },
     clientName: {
         fontSize: 20,
         fontWeight: 'bold',
         color: '#000000',
-        marginBottom: 4,
+        marginRight: 8,
+    },
+    assignedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(46, 204, 113, 0.2)',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+    },
+    assignedBadgeText: {
+        color: '#2ECC71',
+        fontSize: 10,
+        fontWeight: 'bold',
+        marginLeft: 3,
     },
     actionText: {
         fontSize: 16,
@@ -285,6 +352,24 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: '#E0E0E0',
         flex: 1,
+    },
+    statusIndicator: {
+        marginTop: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+    },
+    statusAssigned: {
+        backgroundColor: 'rgba(46, 204, 113, 0.3)',
+    },
+    statusPending: {
+        backgroundColor: 'rgba(241, 196, 15, 0.3)',
+    },
+    statusText: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
     },
     dateBadge: {
         backgroundColor: '#16283C',

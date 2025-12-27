@@ -45,6 +45,35 @@ public class TaskController {
         Task savedTask = taskService.createTask(task);
         return ResponseEntity.ok(savedTask);
     }
+    
+    // Create a task from an order and assign to a route
+    @PostMapping("/from-order")
+    public ResponseEntity<Task> createTaskFromOrder(@RequestBody Map<String, Long> request) {
+        Long orderId = request.get("orderId");
+        Long routeId = request.get("routeId");
+        
+        if (orderId == null || routeId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        
+        Task task = taskService.createTaskFromOrder(orderId, routeId);
+        return ResponseEntity.ok(task);
+    }
+    
+    // Check if an order has an associated task
+    @GetMapping("/order/{orderId}/exists")
+    public ResponseEntity<Map<String, Object>> checkOrderHasTask(@PathVariable Long orderId) {
+        boolean hasTask = taskService.orderHasTask(orderId);
+        Task task = null;
+        if (hasTask) {
+            task = taskService.getTaskByOrderId(orderId).orElse(null);
+        }
+        return ResponseEntity.ok(Map.of(
+            "hasTask", hasTask,
+            "taskId", task != null ? task.getId() : null,
+            "routeId", task != null && task.getRouteId() != null ? task.getRouteId() : null
+        ));
+    }
 
     // Update task status (for driver to mark task as IN_PROGRESS, COMPLETED, etc.)
     @PatchMapping("/{id}/status")
