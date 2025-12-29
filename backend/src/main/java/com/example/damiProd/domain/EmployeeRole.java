@@ -1,5 +1,6 @@
 package com.example.damiProd.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -29,6 +30,7 @@ public class EmployeeRole {
     private String roleName; // e.g., "SALES", "DRIVER", "TECH"
 
     @ManyToMany(mappedBy = "roles")
+    @JsonIgnore  // Oprește recursivitatea infinită în serializarea JSON
     private Set<Employee> employees = new HashSet<>();
 
     public EmployeeRole(String roleName) {

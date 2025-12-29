@@ -3,7 +3,8 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useRouter, useLocalSearchParams } from 'expo-router'
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { OrderService } from '../../services/OrderService';
-import { RouteDefinitionService, RouteDefinition } from '../../services/RouteDefinitionService';
+import { RouteService, Route } from '../../services/RouteService';
+import { TaskService } from '../../services/TaskService';
 
 type DetailRowProps = {
     label: string;
@@ -18,16 +19,19 @@ const OrderDetails = () => {
 
     const [order, setOrder] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [routes, setRoutes] = useState<RouteDefinition[]>([]);
+    const [routes, setRoutes] = useState<Route[]>([]);
+    const [orderTaskStatus, setOrderTaskStatus] = useState<{ hasTask: boolean; routeId: number | null }>({ hasTask: false, routeId: null });
     
     // --- STATE FOR MODAL ---
     const [modalVisible, setModalVisible] = useState(false);
-    const [selectedRoute, setSelectedRoute] = useState<RouteDefinition | null>(null);
+    const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
+    const [assigning, setAssigning] = useState(false);
 
     useEffect(() => {
         if (orderId) {
             fetchOrderDetails();
             fetchRoutes();
+            checkTaskStatus();
         }
     }, [orderId]);
 
@@ -47,17 +51,24 @@ const OrderDetails = () => {
 
     const fetchRoutes = async () => {
         try {
-            const data = await RouteDefinitionService.getAllRouteDefinitions();
+            const data = await RouteService.getAllRoutes();
             setRoutes(data);
         } catch (error) {
             console.error("Failed to fetch routes", error);
         }
     };
+    
+    const checkTaskStatus = async () => {
+        try {
+            const status = await TaskService.checkOrderHasTask(orderId!);
+            setOrderTaskStatus({ hasTask: status.hasTask, routeId: status.routeId });
+        } catch (error) {
+            console.error("Failed to check task status", error);
+        }
+    };
 
     // --- DRAG & DROP LOGIC (ANIMATION) ---
     const pan = useRef(new Animated.ValueXY()).current;
-    
-    // ... existing PanResponder code ...
 
     const panResponder = useRef(
         PanResponder.create({
@@ -76,23 +87,39 @@ const OrderDetails = () => {
     ).current;
 
     // Route selection function
-    const handleSelectRoute = (route: RouteDefinition) => {
+    const handleSelectRoute = (route: Route) => {
         setSelectedRoute(route);
     };
+    
+    // Format route date for display
+    const formatRouteDate = (dateString: string) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('ro-RO', {
+            day: 'numeric',
+            month: 'short',
+        });
+    };
 
-    // Finalize function
+    // Finalize function - creates a Task and assigns it to the selected Route
     const handleFinalize = async () => {
         if (selectedRoute && orderId) {
             try {
-                await OrderService.updateOrder(orderId, { routeDefinition: { id: selectedRoute.id } });
+                setAssigning(true);
+                // Create task from order and assign to route
+                await TaskService.createTaskFromOrder(orderId, selectedRoute.id);
                 setModalVisible(false);
-                Alert.alert("Success", `Order assigned to route ${selectedRoute.name}!`);
-                router.back();
-            } catch (error) {
-                Alert.alert("Error", "Failed to assign route.");
+                setOrderTaskStatus({ hasTask: true, routeId: selectedRoute.id });
+                Alert.alert(
+                    "Succes!", 
+                    `Comanda a fost atribuită rutei din ${formatRouteDate(selectedRoute.date)} (${selectedRoute.employeeName || 'Șofer'})!`
+                );
+            } catch (error: any) {
+                Alert.alert("Eroare", error.message || "Nu s-a putut atribui ruta.");
+            } finally {
+                setAssigning(false);
             }
         } else {
-            Alert.alert("Attention", "Please select a route.");
+            Alert.alert("Atenție", "Te rog selectează o rută.");
         }
     };
 
@@ -156,15 +183,27 @@ const OrderDetails = () => {
                     <DetailRow label="Details" value={order.details} isMultiline />
                 </View>
 
+                {/* STATUS BADGE - shows if already assigned */}
+                {orderTaskStatus.hasTask && (
+                    <View style={styles.assignedBadge}>
+                        <Ionicons name="checkmark-circle" size={20} color="#2ECC71" />
+                        <Text style={styles.assignedText}>Asociată unei rute</Text>
+                    </View>
+                )}
+
                 {/* OPEN MODAL BUTTON */}
                 <Pressable
                     style={({ pressed }) => [
                         styles.actionButton,
-                        pressed && styles.buttonPressed
+                        orderTaskStatus.hasTask && styles.disabledActionButton,
+                        pressed && !orderTaskStatus.hasTask && styles.buttonPressed
                     ]}
-                    onPress={() => setModalVisible(true)}
+                    onPress={() => !orderTaskStatus.hasTask && setModalVisible(true)}
+                    disabled={orderTaskStatus.hasTask}
                 >
-                    <Text style={styles.actionButtonText}>Associate with Route</Text>
+                    <Text style={styles.actionButtonText}>
+                        {orderTaskStatus.hasTask ? 'Deja atribuită' : 'Asociază cu o rută'}
+                    </Text>
                 </Pressable>
 
                 <Pressable onPress={() => console.log("Navigate map")} style={styles.mapLinkContainer}>
@@ -211,41 +250,66 @@ const OrderDetails = () => {
                             <Pressable
                                 style={[
                                     styles.finalizeButton,
-                                    !selectedRoute && styles.disabledButton
+                                    (!selectedRoute || assigning) && styles.disabledButton
                                 ]}
                                 onPress={handleFinalize}
-                                disabled={!selectedRoute}
+                                disabled={!selectedRoute || assigning}
                             >
-                                <Text style={styles.finalizeText}>Finalize</Text>
-                                <MaterialCommunityIcons name="truck-delivery" size={20} color="white" style={{ marginLeft: 5 }} />
+                                {assigning ? (
+                                    <ActivityIndicator size="small" color="white" />
+                                ) : (
+                                    <>
+                                        <Text style={styles.finalizeText}>Finalizează</Text>
+                                        <MaterialCommunityIcons name="truck-delivery" size={20} color="white" style={{ marginLeft: 5 }} />
+                                    </>
+                                )}
                             </Pressable>
                         </View>
 
-                        {/* --- GRID SECTION (ROUTES) --- */}
-                        <View style={styles.gridContainer}>
+                        {/* --- SCROLLABLE ROUTES LIST --- */}
+                        <ScrollView style={styles.routesScrollView} contentContainerStyle={styles.routesScrollContent}>
                             {routes.length > 0 ? (
-                                routes.map((route, index) => (
+                                routes.map((route) => (
                                     <Pressable
                                         key={route.id}
                                         style={[
-                                            styles.dropZone,
-                                            selectedRoute?.id === route.id && styles.activeDropZone
+                                            styles.routeCard,
+                                            selectedRoute?.id === route.id && styles.activeRouteCard
                                         ]}
                                         onPress={() => handleSelectRoute(route)}
                                     >
-                                        <Text style={[
-                                            styles.dropZoneText,
-                                            selectedRoute?.id === route.id && styles.activeDropZoneText
-                                        ]}>
-                                            {route.name}
-                                        </Text>
-                                        <Text style={{ fontSize: 10, color: selectedRoute?.id === route.id ? 'white' : '#666' }}>{route.city}</Text>
+                                        <View style={styles.routeCardContent}>
+                                            <Text style={[
+                                                styles.routeCardDriver,
+                                                selectedRoute?.id === route.id && styles.activeRouteText
+                                            ]}>
+                                                {route.employeeName || 'Șofer neasignat'}
+                                            </Text>
+                                            <Text style={[
+                                                styles.routeCardDate,
+                                                selectedRoute?.id === route.id && styles.activeRouteSubtext
+                                            ]}>
+                                                {formatRouteDate(route.date)}
+                                            </Text>
+                                            <Text style={[
+                                                styles.routeCardTasks,
+                                                selectedRoute?.id === route.id && styles.activeRouteSubtext
+                                            ]}>
+                                                {route.tasks?.length || 0} task-uri
+                                            </Text>
+                                        </View>
+                                        {selectedRoute?.id === route.id && (
+                                            <Ionicons name="checkmark-circle" size={24} color="white" />
+                                        )}
                                     </Pressable>
                                 ))
                             ) : (
-                                <Text>No routes available.</Text>
+                                <View style={styles.emptyRoutes}>
+                                    <Ionicons name="alert-circle-outline" size={40} color="#999" />
+                                    <Text style={styles.emptyRoutesText}>Nu există rute disponibile</Text>
+                                </View>
                             )}
-                        </View>
+                        </ScrollView>
 
                         <Pressable
                             style={styles.closeModalButton}
@@ -276,8 +340,27 @@ const styles = StyleSheet.create({
     multilineValue: { flex: 1.5 },
 
     actionButton: { backgroundColor: '#427992', width: '100%', height: 55, borderRadius: 15, justifyContent: 'center', alignItems: 'center', elevation: 5, shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4 },
+    disabledActionButton: { backgroundColor: '#6B8A9A' },
     buttonPressed: { opacity: 0.8, transform: [{ scale: 0.98 }] },
     actionButtonText: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold' },
+    
+    // Assigned Badge
+    assignedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(46, 204, 113, 0.2)',
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+        borderRadius: 20,
+        marginBottom: 15,
+    },
+    assignedText: {
+        color: '#2ECC71',
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginLeft: 8,
+    },
+    
     mapLinkContainer: { marginTop: 20, alignSelf: 'flex-end' },
     mapLinkText: { color: '#5D8AA8', fontSize: 16, fontWeight: 'bold' },
 
@@ -347,40 +430,61 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
 
-    // Routes Grid
-    gridContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
+    // Routes Scroll View
+    routesScrollView: {
+        maxHeight: 300,
         width: '100%',
     },
-    dropZone: {
-        width: '48%', // 2 per row
-        height: 70,
-        backgroundColor: '#CDDEE7', // Very light blue
-        borderRadius: 10,
-        borderWidth: 2,
-        borderColor: '#889',
-        borderStyle: 'dashed', // DASHED LINE
-        justifyContent: 'center',
+    routesScrollContent: {
+        paddingBottom: 10,
+    },
+    routeCard: {
+        backgroundColor: '#F5F5F5',
+        borderRadius: 12,
+        padding: 15,
+        marginBottom: 10,
+        flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 15,
+        justifyContent: 'space-between',
+        borderWidth: 2,
+        borderColor: 'transparent',
     },
-    activeDropZone: {
-        backgroundColor: '#5D8AA8', // Colored when selected
+    activeRouteCard: {
+        backgroundColor: '#5D8AA8',
         borderColor: '#16283C',
-        borderStyle: 'solid',
     },
-    dropZoneText: {
-        color: 'white',
-        fontWeight: 'bold',
+    routeCardContent: {
+        flex: 1,
+    },
+    routeCardDriver: {
         fontSize: 16,
-        textShadowColor: 'rgba(0, 0, 0, 0.2)',
-        textShadowOffset: { width: -1, height: 1 },
-        textShadowRadius: 10
+        fontWeight: 'bold',
+        color: '#16283C',
+        marginBottom: 4,
     },
-    activeDropZoneText: {
+    routeCardDate: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 2,
+    },
+    routeCardTasks: {
+        fontSize: 12,
+        color: '#888',
+    },
+    activeRouteText: {
         color: 'white',
+    },
+    activeRouteSubtext: {
+        color: 'rgba(255,255,255,0.8)',
+    },
+    emptyRoutes: {
+        alignItems: 'center',
+        paddingVertical: 30,
+    },
+    emptyRoutesText: {
+        color: '#999',
+        fontSize: 14,
+        marginTop: 10,
     },
 
     closeModalButton: {

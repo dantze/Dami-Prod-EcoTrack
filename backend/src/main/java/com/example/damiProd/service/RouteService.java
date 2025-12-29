@@ -3,6 +3,7 @@ package com.example.damiProd.service;
 import com.example.damiProd.domain.Route;
 import com.example.damiProd.repository.RouteRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -27,12 +28,20 @@ public class RouteService {
         routeRepository.deleteById(id);
     }
     
+    @Transactional(readOnly = true)
     public Route getRouteById(Long id) {
-        return routeRepository.findById(id)
+        Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ruta nu a fost găsită"));
+        // Force loading of tasks (triggers lazy loading within transaction)
+        route.getTasks().size();
+        return route;
     }
 
+    @Transactional(readOnly = true)
     public List<Route> getRoutesByEmployeeId(Long employeeId) {
-        return routeRepository.findByEmployee_Id(employeeId);
+        List<Route> routes = routeRepository.findByEmployee_Id(employeeId);
+        // Force loading of tasks for each route
+        routes.forEach(route -> route.getTasks().size());
+        return routes;
     }
 }

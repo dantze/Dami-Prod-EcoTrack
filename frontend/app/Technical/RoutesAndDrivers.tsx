@@ -1,17 +1,85 @@
-import { StyleSheet, Text, View, TextInput, Pressable, TouchableWithoutFeedback, Keyboard } from 'react-native'
-import React from 'react'
-import { useState } from 'react'
+import { StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from 'react-native'
+import React, { useEffect, useState } from 'react'
 import { useRouter, useLocalSearchParams } from 'expo-router'
+import { getAllDrivers, Employee } from '../../services/EmployeeService'
 
 const RoutesAndDrivers = () => {
+    const router = useRouter();
     const { zona } = useLocalSearchParams<{ zona?: string }>();
     const zonaLabel = zona ?? 'Center';
+
+    const [drivers, setDrivers] = useState<Employee[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        loadDrivers();
+    }, []);
+
+    const loadDrivers = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await getAllDrivers();
+            setDrivers(data);
+        } catch (err) {
+            setError('Nu s-au putut încărca șoferii');
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDriverPress = (driver: Employee) => {
+        router.push({
+            pathname: '/Technical/DriverRoutesList',
+            params: {
+                driverId: driver.id.toString(),
+                driverName: driver.fullName,
+                zona: zonaLabel,
+            },
+        });
+    };
 
     return (
         <View style={styles.container}>
             <View style={styles.headerContainer}>
-                <Text style={styles.headerText}>{`Routes and Drivers - ${zonaLabel}`}</Text>
+                <Text style={styles.headerText}>{`Șoferi - ${zonaLabel}`}</Text>
             </View>
+
+            {loading ? (
+                <View style={styles.centerContent}>
+                    <ActivityIndicator size="large" color="#427992" />
+                    <Text style={styles.loadingText}>Se încarcă șoferii...</Text>
+                </View>
+            ) : error ? (
+                <View style={styles.centerContent}>
+                    <Text style={styles.errorText}>{error}</Text>
+                    <Pressable style={styles.retryButton} onPress={loadDrivers}>
+                        <Text style={styles.retryButtonText}>Încearcă din nou</Text>
+                    </Pressable>
+                </View>
+            ) : drivers.length === 0 ? (
+                <View style={styles.centerContent}>
+                    <Text style={styles.emptyText}>Nu există șoferi în baza de date</Text>
+                </View>
+            ) : (
+                <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+                    {drivers.map((driver) => (
+                        <Pressable
+                            key={driver.id}
+                            style={({ pressed }) => [
+                                styles.driverButton,
+                                pressed && styles.buttonPressed,
+                            ]}
+                            onPress={() => handleDriverPress(driver)}
+                        >
+                            <Text style={styles.driverName}>{driver.fullName}</Text>
+                            <Text style={styles.driverPhone}>{driver.phone || 'Fără telefon'}</Text>
+                        </Pressable>
+                    ))}
+                </ScrollView>
+            )}
         </View>
     )
 }
@@ -26,7 +94,7 @@ const styles = StyleSheet.create({
         marginTop: 60,
         paddingHorizontal: 20,
         width: '100%',
-        marginBottom: 40,
+        marginBottom: 20,
     },
     headerText: {
         color: '#FFFFFF',
@@ -34,136 +102,71 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         textAlign: 'left',
     },
-    inputsContainer: {
-        alignItems: 'center',
-        zIndex: 10,
-        paddingBottom: 50,
-    },
-    dropdownWrapper: {
-        position: 'relative',
-        width: 330,
-        alignItems: 'center',
-    },
-    zoneButton: {
-        width: '100%',
-        height: 50,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+    centerContent: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 20,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3.84,
-        elevation: 3,
     },
-    buttonDisabled: {
-        backgroundColor: '#E0E0E0',
+    loadingText: {
+        color: '#FFFFFF',
+        marginTop: 10,
+        fontSize: 16,
     },
-    buttonPressed: {
-        opacity: 0.9,
-        transform: [{ scale: 0.99 }]
+    errorText: {
+        color: '#ff6b6b',
+        fontSize: 16,
+        textAlign: 'center',
+        marginBottom: 20,
     },
-    buttonText: {
-        color: '#16283C',
+    emptyText: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 16,
+        textAlign: 'center',
+    },
+    retryButton: {
+        backgroundColor: '#427992',
+        paddingHorizontal: 24,
+        paddingVertical: 12,
+        borderRadius: 20,
+    },
+    retryButtonText: {
+        color: '#FFFFFF',
         fontSize: 16,
         fontWeight: 'bold',
     },
-    dropdownContent: {
-        position: 'absolute',
-        top: 55,
-        width: '100%',
-        backgroundColor: '#FFFFFF',
-        borderRadius: 12,
-        paddingVertical: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 5 },
-        shadowOpacity: 0.3,
-        shadowRadius: 5,
-        elevation: 10,
-        overflow: 'hidden'
+    scrollView: {
+        flex: 1,
     },
-    dropdownItem: {
-        paddingVertical: 12,
+    scrollContent: {
         paddingHorizontal: 20,
-        justifyContent: 'center',
-        backgroundColor: '#fff'
+        paddingBottom: 40,
+        gap: 12,
     },
-    dropdownText: {
-        color: '#16283C',
-        fontSize: 16,
-        fontWeight: '500',
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#EEEEEE',
-        width: '100%',
-    },
-
-    // --- STYLES FOR CONTINUE BUTTON ---
-    continueButton: {
-        marginTop: 10, // Space from top dropdown
-        width: 200,
-        height: 50,
-        backgroundColor: '#427992', // Teal-blue color (like old theme)
-        borderRadius: 25,
-        justifyContent: 'center',
-        alignItems: 'center',
-        elevation: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 3.84,
-        zIndex: 1, // To be under dropdowns if they open
-    },
-    optiuneButton: {
-        //marginTop: 5, // Space from top dropdown
-        width: 330,
-        height: 50,
-        backgroundColor: '#427992', // Teal-blue color (like old theme)
+    driverButton: {
+        backgroundColor: '#427992',
         borderRadius: 15,
-        justifyContent: 'center',
+        padding: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
         elevation: 5,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
-        zIndex: 1, // To be under dropdowns if they open
     },
-    continueButtonText: {
+    buttonPressed: {
+        opacity: 0.9,
+        transform: [{ scale: 0.99 }],
+    },
+    driverName: {
         color: '#FFFFFF',
         fontSize: 18,
         fontWeight: 'bold',
     },
-    // ---------------------------------------
-
-    mapContainer: {
-        flex: 1,
-        width: '100%',
-        justifyContent: 'flex-end',
-        alignItems: 'center',
-        paddingBottom: 80,
-        zIndex: 1,
+    driverPhone: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 14,
     },
-    buttonsContainer: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'flex-start',
-        paddingBottom: 50,
-        marginTop: 30,
-    },
-    separator: {
-        width: 100,
-        height: 2,
-        backgroundColor: 'rgba(255, 255, 255, 0.3)',
-        marginVertical: 15,
-    },
-    mapImage: {
-        width: '90%',
-        height: 250,
-        opacity: 0.8,
-    }
 })

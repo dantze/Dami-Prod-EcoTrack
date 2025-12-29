@@ -6,6 +6,7 @@ import com.example.damiProd.service.TaskService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -44,6 +45,35 @@ public class TaskController {
     public ResponseEntity<Task> createTask(@RequestBody Task task) {
         Task savedTask = taskService.createTask(task);
         return ResponseEntity.ok(savedTask);
+    }
+    
+    // Create a task from an order and assign to a route
+    @PostMapping("/from-order")
+    public ResponseEntity<Task> createTaskFromOrder(@RequestBody Map<String, Long> request) {
+        Long orderId = request.get("orderId");
+        Long routeId = request.get("routeId");
+        
+        if (orderId == null || routeId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        
+        Task task = taskService.createTaskFromOrder(orderId, routeId);
+        return ResponseEntity.ok(task);
+    }
+    
+    // Check if an order has an associated task
+    @GetMapping("/order/{orderId}/exists")
+    public ResponseEntity<Map<String, Object>> checkOrderHasTask(@PathVariable Long orderId) {
+        boolean hasTask = taskService.orderHasTask(orderId);
+        Task task = null;
+        if (hasTask) {
+            task = taskService.getTaskByOrderId(orderId).orElse(null);
+        }
+        Map<String, Object> response = new HashMap<>();
+        response.put("hasTask", hasTask);
+        response.put("taskId", task != null ? task.getId() : null);
+        response.put("routeId", task != null && task.getRouteId() != null ? task.getRouteId() : null);
+        return ResponseEntity.ok(response);
     }
 
     // Update task status (for driver to mark task as IN_PROGRESS, COMPLETED, etc.)
