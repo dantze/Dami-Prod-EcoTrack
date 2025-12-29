@@ -6,6 +6,7 @@ import com.example.damiProd.service.TaskService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -68,11 +69,11 @@ public class TaskController {
         if (hasTask) {
             task = taskService.getTaskByOrderId(orderId).orElse(null);
         }
-        return ResponseEntity.ok(Map.of(
-            "hasTask", hasTask,
-            "taskId", task != null ? task.getId() : null,
-            "routeId", task != null && task.getRouteId() != null ? task.getRouteId() : null
-        ));
+        Map<String, Object> response = new HashMap<>();
+        response.put("hasTask", hasTask);
+        response.put("taskId", task != null ? task.getId() : null);
+        response.put("routeId", task != null && task.getRouteId() != null ? task.getRouteId() : null);
+        return ResponseEntity.ok(response);
     }
 
     // Update task status (for driver to mark task as IN_PROGRESS, COMPLETED, etc.)
