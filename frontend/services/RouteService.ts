@@ -13,6 +13,7 @@ export interface RouteData {
 export interface Route {
     id: number;
     date: string;
+    county?: string;
     employeeId: number;
     employeeName: string;
     tasks: any[];
@@ -22,6 +23,14 @@ export const RouteService = {
    
     getAllRoutes: async () => {
         const response = await fetch(`${API_BASE_URL}/routes`);
+        if (!response.ok) {
+            throw new Error('Eșec la preluarea rutelor');
+        }
+        return await response.json();
+    },
+
+    getRoutesByCounty: async (county: string): Promise<Route[]> => {
+        const response = await fetch(`${API_BASE_URL}/routes/county/${encodeURIComponent(county)}`);
         if (!response.ok) {
             throw new Error('Eșec la preluarea rutelor');
         }

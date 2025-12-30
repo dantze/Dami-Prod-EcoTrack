@@ -20,6 +20,14 @@ public class RouteService {
         return routeRepository.findAll();
     }
 
+    @Transactional(readOnly = true)
+    public List<Route> getRoutesByCounty(String county) {
+        List<Route> routes = routeRepository.findByCounty(county);
+        // Force loading of tasks for each route
+        routes.forEach(route -> route.getTasks().size());
+        return routes;
+    }
+
     public Route createRoute(Route route) {
         return routeRepository.save(route);
     }

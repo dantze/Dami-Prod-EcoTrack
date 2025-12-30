@@ -1,11 +1,11 @@
 import { StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator } from 'react-native'
 import React, { useEffect, useState } from 'react'
 import { useRouter, useLocalSearchParams } from 'expo-router'
-import { getAllDrivers, Employee } from '../../services/EmployeeService'
+import { getAllDrivers, getDriversByCounty, Employee } from '../../services/EmployeeService'
 
 const RoutesAndDrivers = () => {
     const router = useRouter();
-    const { zona } = useLocalSearchParams<{ zona?: string }>();
+    const { zona, county } = useLocalSearchParams<{ zona?: string; county?: string }>();
     const zonaLabel = zona ?? 'Center';
 
     const [drivers, setDrivers] = useState<Employee[]>([]);
@@ -14,13 +14,27 @@ const RoutesAndDrivers = () => {
 
     useEffect(() => {
         loadDrivers();
-    }, []);
+    }, [county]);
 
     const loadDrivers = async () => {
         try {
             setLoading(true);
             setError(null);
-            const data = await getAllDrivers();
+            
+            let data: Employee[] = [];
+            
+            // If county is provided, try to filter by county first
+            if (county) {
+                data = await getDriversByCounty(county);
+                // If no drivers found for this county, fall back to all drivers
+                if (data.length === 0) {
+                    console.log(`No drivers found for county ${county}, showing all drivers`);
+                    data = await getAllDrivers();
+                }
+            } else {
+                data = await getAllDrivers();
+            }
+            
             setDrivers(data);
         } catch (err) {
             setError('Nu s-au putut încărca șoferii');
@@ -37,6 +51,7 @@ const RoutesAndDrivers = () => {
                 driverId: driver.id.toString(),
                 driverName: driver.fullName,
                 zona: zonaLabel,
+                county: county,
             },
         });
     };
@@ -44,7 +59,7 @@ const RoutesAndDrivers = () => {
     return (
         <View style={styles.container}>
             <View style={styles.headerContainer}>
-                <Text style={styles.headerText}>{`Șoferi - ${zonaLabel}`}</Text>
+                <Text style={styles.headerText}>{`Șoferi - ${county || zonaLabel}`}</Text>
             </View>
 
             {loading ? (

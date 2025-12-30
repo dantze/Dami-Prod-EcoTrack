@@ -16,6 +16,8 @@ public class Route {
     private Long id;
 
     private LocalDate date;
+    
+    private String county;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id", nullable = false)
@@ -60,6 +62,14 @@ public class Route {
 
     public void setDate(LocalDate date) {
         this.date = date;
+    }
+
+    public String getCounty() {
+        return county;
+    }
+
+    public void setCounty(String county) {
+        this.county = county;
     }
 
     public Employee getEmployee() {

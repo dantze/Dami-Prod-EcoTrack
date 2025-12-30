@@ -6,7 +6,7 @@ const mapImageSource = require('../../assets/images/harta_romania.png');
 
 const Menu = () => {
     const router = useRouter();
-    const { zona } = useLocalSearchParams<{ zona?: string }>();
+    const { zona, county } = useLocalSearchParams<{ zona?: string; county?: string }>();
     const handlePress = () => {
         console.log('Button pressed')
     };
@@ -14,6 +14,7 @@ const Menu = () => {
         <View style={styles.container}>
             <View style={styles.headerContainer}>
                 <Text style={styles.headerText}>Technical Menu</Text>
+                {county && <Text style={styles.subHeaderText}>{county}</Text>}
             </View>
 
             <View style={styles.buttonsContainer}>
@@ -24,7 +25,7 @@ const Menu = () => {
                     ]}
                     onPress={() =>
 
-                        router.push({ pathname: '/Technical/Orders', params: { zona } })
+                        router.push({ pathname: '/Technical/Orders', params: { zona, county } })
                     }
                 >
                     <Text style={styles.continueButtonText}>Orders</Text>
@@ -38,7 +39,7 @@ const Menu = () => {
                 ]}
                     onPress={() =>
 
-                        router.push({ pathname: '/Technical/Routes', params: { zona } })
+                        router.push({ pathname: '/Technical/Routes', params: { zona, county } })
                     }
                 >
                     <Text style={styles.continueButtonText}>Routes</Text>
@@ -52,7 +53,7 @@ const Menu = () => {
                 ]}
                     onPress={() =>
 
-                        router.push({ pathname: '/Technical/RoutesAndDrivers', params: { zona } })
+                        router.push({ pathname: '/Technical/RoutesAndDrivers', params: { zona, county } })
                     }
                 >
                     <Text style={styles.continueButtonText}>Routes and Drivers</Text>
@@ -87,6 +88,11 @@ const styles = StyleSheet.create({
         fontSize: 22,
         fontWeight: 'bold',
         textAlign: 'left',
+    },
+    subHeaderText: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 14,
+        marginTop: 4,
     },
     inputsContainer: {
         alignItems: 'center',

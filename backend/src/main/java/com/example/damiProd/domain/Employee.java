@@ -24,6 +24,7 @@ public class Employee {
 
     private String fullName;
     private String phone;
+    private String county;
 
     @ManyToMany(fetch = FetchType.EAGER, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
@@ -86,6 +87,14 @@ public class Employee {
 
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+
+    public String getCounty() {
+        return county;
+    }
+
+    public void setCounty(String county) {
+        this.county = county;
     }
 
     public Set<EmployeeRole> getRoles() {
