@@ -10,6 +10,7 @@ export interface Employee {
     username: string;
     fullName: string;
     phone: string;
+    county?: string;
     roles: EmployeeRole[];
 }
 
@@ -40,6 +41,17 @@ export const getEmployeeById = async (id: number): Promise<Employee> => {
  */
 export const getAllDrivers = async (): Promise<Employee[]> => {
     const response = await fetch(`${API_BASE_URL}/employees/drivers`);
+    if (!response.ok) {
+        throw new Error('Eroare la încărcarea șoferilor');
+    }
+    return response.json();
+};
+
+/**
+ * Obține șoferii dintr-un anumit județ
+ */
+export const getDriversByCounty = async (county: string): Promise<Employee[]> => {
+    const response = await fetch(`${API_BASE_URL}/employees/drivers/county/${encodeURIComponent(county)}`);
     if (!response.ok) {
         throw new Error('Eroare la încărcarea șoferilor');
     }

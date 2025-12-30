@@ -22,6 +22,11 @@ public class RouteController {
         return ResponseEntity.ok(routeService.getAllRoutes());
     }
 
+    @GetMapping("/county/{county}")
+    public ResponseEntity<List<Route>> getRoutesByCounty(@PathVariable String county) {
+        return ResponseEntity.ok(routeService.getRoutesByCounty(county));
+    }
+
     @PostMapping
     public ResponseEntity<Route> createRoute(@RequestBody Route route) {
         Route savedRoute = routeService.createRoute(route);

@@ -50,7 +50,7 @@ const WestCenter = () => {
     const handleContinue = () => {
         console.log(`Navigating to next step with: ${selectedZone} - ${selectedCounty}`);
 
-        router.push({ pathname: '/Technical/Menu', params: { zona: selectedZone } });
+        router.push({ pathname: '/Technical/Menu', params: { zona: selectedZone, county: selectedCounty } });
     };
 
     return (

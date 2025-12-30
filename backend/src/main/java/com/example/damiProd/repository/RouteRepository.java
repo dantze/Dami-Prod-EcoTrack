@@ -10,4 +10,6 @@ import java.util.List;
 public interface RouteRepository extends JpaRepository<Route, Long> {
     
     List<Route> findByEmployee_Id(Long employeeId);
+    
+    List<Route> findByCounty(String county);
 }

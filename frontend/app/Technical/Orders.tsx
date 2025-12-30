@@ -38,7 +38,7 @@ type Order = {
 type OrderTaskMap = { [orderId: number]: boolean };
 
 const Orders = () => {
-    const { zona } = useLocalSearchParams<{ zona?: string }>();
+    const { zona, county } = useLocalSearchParams<{ zona?: string; county?: string }>();
     const zonaLabel = zona ?? 'Center';
     const router = useRouter();
 
@@ -156,7 +156,8 @@ const Orders = () => {
             pathname: "/Technical/OrderDetails",
             params: {
                 id: order.id,
-                client: getClientName(order)
+                client: getClientName(order),
+                county: county
             }
         });
     };
