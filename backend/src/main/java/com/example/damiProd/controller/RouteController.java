@@ -52,4 +52,13 @@ public class RouteController {
         List<Route> routes = routeService.getRoutesByEmployeeId(employeeId);
         return ResponseEntity.ok(routes);
     }
+
+    // Assign a driver to a route
+    @PutMapping("/{routeId}/assign-driver/{employeeId}")
+    public ResponseEntity<Route> assignDriverToRoute(
+            @PathVariable Long routeId,
+            @PathVariable Long employeeId) {
+        Route updatedRoute = routeService.assignDriverToRoute(routeId, employeeId);
+        return ResponseEntity.ok(updatedRoute);
+    }
 }

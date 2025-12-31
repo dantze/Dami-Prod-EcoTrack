@@ -1,6 +1,8 @@
 package com.example.damiProd.service;
 
+import com.example.damiProd.domain.Employee;
 import com.example.damiProd.domain.Route;
+import com.example.damiProd.repository.EmployeeRepository;
 import com.example.damiProd.repository.RouteRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,9 +13,11 @@ import java.util.List;
 public class RouteService {
 
     private final RouteRepository routeRepository;
+    private final EmployeeRepository employeeRepository;
 
-    public RouteService(RouteRepository routeRepository) {
+    public RouteService(RouteRepository routeRepository, EmployeeRepository employeeRepository) {
         this.routeRepository = routeRepository;
+        this.employeeRepository = employeeRepository;
     }
 
     public List<Route> getAllRoutes() {
@@ -51,5 +55,16 @@ public class RouteService {
         // Force loading of tasks for each route
         routes.forEach(route -> route.getTasks().size());
         return routes;
+    }
+
+    @Transactional
+    public Route assignDriverToRoute(Long routeId, Long employeeId) {
+        Route route = routeRepository.findById(routeId)
+                .orElseThrow(() -> new RuntimeException("Ruta nu a fost găsită"));
+        Employee employee = employeeRepository.findById(employeeId)
+                .orElseThrow(() -> new RuntimeException("Angajatul nu a fost găsit"));
+        
+        route.setEmployee(employee);
+        return routeRepository.save(route);
     }
 }
