@@ -67,5 +67,16 @@ export const RouteService = {
             throw new Error('Eșec la crearea rutei');
         }
         return await response.json();
+    },
+
+    assignDriverToRoute: async (routeId: number, employeeId: number): Promise<Route> => {
+        const response = await fetch(`${API_BASE_URL}/routes/${routeId}/assign-driver/${employeeId}`, {
+            method: 'PUT',
+        });
+
+        if (!response.ok) {
+            throw new Error('Eșec la asignarea șoferului');
+        }
+        return await response.json();
     }
 };

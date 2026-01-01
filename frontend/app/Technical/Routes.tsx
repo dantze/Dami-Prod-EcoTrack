@@ -1,22 +1,42 @@
-import { StyleSheet, Text, View, Pressable, Image, ScrollView, ActivityIndicator } from 'react-native'
+import { StyleSheet, Text, View, Pressable, Image, ScrollView, ActivityIndicator, Modal } from 'react-native'
 import React, { useState, useCallback } from 'react'
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons';
-import { RouteDefinitionService, RouteDefinition } from '../../services/RouteDefinitionService';
+import { RouteService, Route } from '../../services/RouteService';
+import { getAllDrivers, getDriversByCounty, Employee } from '../../services/EmployeeService';
 
 const mapImageSource = require('../../assets/images/harta_romania.png');
 
 const Routes = () => {
     const router = useRouter();
-    const { zona } = useLocalSearchParams<{ zona?: string }>();
+    const { zona, county } = useLocalSearchParams<{ zona?: string; county?: string }>();
     const zonaLabel = zona ?? 'Center';
-    const [routes, setRoutes] = useState<RouteDefinition[]>([]);
+    const [routes, setRoutes] = useState<Route[]>([]);
     const [loading, setLoading] = useState(true);
+    
+    // Driver assignment modal state
+    const [driverModalVisible, setDriverModalVisible] = useState(false);
+    const [selectedRoute, setSelectedRoute] = useState<Route | null>(null);
+    const [drivers, setDrivers] = useState<Employee[]>([]);
+    const [driversLoading, setDriversLoading] = useState(false);
 
     const fetchRoutes = async () => {
         try {
             setLoading(true);
-            const data = await RouteDefinitionService.getAllRouteDefinitions();
+            let data: Route[] = [];
+            
+            // If county is provided, try to filter by county first
+            if (county) {
+                data = await RouteService.getRoutesByCounty(county);
+                // If no routes found for this county, fall back to all routes
+                if (data.length === 0) {
+                    console.log(`No routes found for county ${county}, showing all routes`);
+                    data = await RouteService.getAllRoutes();
+                }
+            } else {
+                data = await RouteService.getAllRoutes();
+            }
+            
             setRoutes(data);
         } catch (error) {
             console.error('Error fetching routes:', error);
@@ -28,24 +48,75 @@ const Routes = () => {
     useFocusEffect(
         useCallback(() => {
             fetchRoutes();
-        }, [])
+        }, [county])
     );
 
-    const handleRoutePress = (route: RouteDefinition) => {
-        console.log("You selected route:", route.name);
-
-        router.push({
-            pathname: "/Technical/Map",
-            params: {
-                routeId: route.id,
-                routeName: route.name,
-                city: route.city
+    // Fetch drivers filtered by county
+    const fetchDrivers = async () => {
+        try {
+            setDriversLoading(true);
+            let data: Employee[] = [];
+            
+            if (county) {
+                data = await getDriversByCounty(county);
+                if (data.length === 0) {
+                    console.log(`No drivers found for county ${county}, showing all drivers`);
+                    data = await getAllDrivers();
+                }
+            } else {
+                data = await getAllDrivers();
             }
-        });
+            
+            setDrivers(data);
+        } catch (error) {
+            console.error('Error fetching drivers:', error);
+        } finally {
+            setDriversLoading(false);
+        }
     };
 
     const handleAddRoute = () => {
-        router.push('/Technical/CreateRoute');
+        router.push({
+            pathname: "/Technical/CreateRoute",
+            params: { zona, county }
+        });
+    };
+
+    // Format date for display
+    const formatDate = (dateString: string) => {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('ro-RO', {
+            weekday: 'short',
+            day: 'numeric',
+            month: 'short',
+        });
+    };
+
+    const handleRoutePress = (route: Route) => {
+        console.log("You selected route:", route.id);
+        setSelectedRoute(route);
+        fetchDrivers();
+        setDriverModalVisible(true);
+    };
+
+    const handleSelectDriver = async (driver: Employee) => {
+        if (!selectedRoute) return;
+        
+        try {
+            await RouteService.assignDriverToRoute(selectedRoute.id, driver.id);
+            console.log(`Assigned driver ${driver.fullName} to route ${selectedRoute.id}`);
+            setDriverModalVisible(false);
+            setSelectedRoute(null);
+            // Refresh routes to show updated driver assignment
+            fetchRoutes();
+        } catch (error) {
+            console.error('Error assigning driver:', error);
+        }
+    };
+
+    const handleCloseDriverModal = () => {
+        setDriverModalVisible(false);
+        setSelectedRoute(null);
     };
 
     return (
@@ -53,10 +124,10 @@ const Routes = () => {
 
             {/* Header */}
             <View style={styles.headerContainer}>
-                <Text style={styles.headerText}>{`Routes - ${zonaLabel}`}</Text>
+                <Text style={styles.headerText}>{`Rute - ${county || zonaLabel}`}</Text>
             </View>
 
-            {/* Static Add Route Button */}
+            {/* Add Route Button */}
             <View style={styles.addButtonContainer}>
                 <Pressable
                     style={({ pressed }) => [
@@ -73,21 +144,29 @@ const Routes = () => {
             <View style={styles.listContainer}>
                 {loading ? (
                     <ActivityIndicator size="large" color="#ffffff" />
+                ) : routes.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                        <Ionicons name="map-outline" size={60} color="#5D8AA8" />
+                        <Text style={styles.emptyText}>Nu există rute</Text>
+                    </View>
                 ) : (
                     <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                        {routes.map((item, index) => (
-                            <View key={item.id} style={styles.itemWrapper}>
+                        {routes.map((route, index) => (
+                            <View key={route.id} style={styles.itemWrapper}>
 
                                 <Pressable
                                     style={({ pressed }) => [
                                         styles.routeButton,
                                         pressed && styles.buttonPressed
                                     ]}
-                                    onPress={() => handleRoutePress(item)}
+                                    onPress={() => handleRoutePress(route)}
                                 >
-                                    <View>
-                                        <Text style={styles.buttonText}>{item.name}</Text>
-                                        <Text style={styles.subtitleText}>{item.city}</Text>
+                                    <View style={styles.routeInfo}>
+                                        <Text style={styles.buttonText}>{formatDate(route.date)}</Text>
+                                        <Text style={styles.subtitleText}>{route.employeeName || 'Șofer neasignat'}</Text>
+                                    </View>
+                                    <View style={styles.routeIdBadge}>
+                                        <Text style={styles.routeIdText}>#{route.id}</Text>
                                     </View>
                                 </Pressable>
 
@@ -105,11 +184,63 @@ const Routes = () => {
                     style={styles.mapImage}
                     resizeMode="contain"
                 />
-
-                {/* <Pressable onPress={() => console.log("Navigate Full Map")} style={styles.navLink}>
-                    <Text style={styles.navLinkText}>Navigate map →</Text>
-                </Pressable> */}
             </View>
+
+            {/* Driver Assignment Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={driverModalVisible}
+                onRequestClose={handleCloseDriverModal}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Selectează Șofer</Text>
+                            <Pressable onPress={handleCloseDriverModal}>
+                                <Ionicons name="close" size={24} color="#FFFFFF" />
+                            </Pressable>
+                        </View>
+                        
+                        {selectedRoute && (
+                            <Text style={styles.modalSubtitle}>
+                                Rută: {formatDate(selectedRoute.date)} - #{selectedRoute.id}
+                            </Text>
+                        )}
+
+                        {driversLoading ? (
+                            <ActivityIndicator size="large" color="#ffffff" style={{ marginTop: 20 }} />
+                        ) : drivers.length === 0 ? (
+                            <View style={styles.emptyContainer}>
+                                <Ionicons name="person-outline" size={40} color="#5D8AA8" />
+                                <Text style={styles.emptyText}>Nu există șoferi disponibili</Text>
+                            </View>
+                        ) : (
+                            <ScrollView style={styles.modalList}>
+                                {drivers.map((driver) => (
+                                    <Pressable
+                                        key={driver.id}
+                                        style={({ pressed }) => [
+                                            styles.driverItem,
+                                            pressed && styles.buttonPressed
+                                        ]}
+                                        onPress={() => handleSelectDriver(driver)}
+                                    >
+                                        <Ionicons name="person-circle-outline" size={32} color="#FFFFFF" />
+                                        <View style={styles.driverInfo}>
+                                            <Text style={styles.driverName}>{driver.fullName}</Text>
+                                            {driver.county && (
+                                                <Text style={styles.driverCounty}>{driver.county}</Text>
+                                            )}
+                                        </View>
+                                        <Ionicons name="chevron-forward" size={20} color="#5D8AA8" />
+                                    </Pressable>
+                                ))}
+                            </ScrollView>
+                        )}
+                    </View>
+                </View>
+            </Modal>
 
         </View>
     )
@@ -177,8 +308,10 @@ const styles = StyleSheet.create({
         height: 60,
         backgroundColor: '#427992',
         borderRadius: 20,
-        justifyContent: 'center',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         alignItems: 'center',
+        paddingHorizontal: 15,
         elevation: 5,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -205,6 +338,35 @@ const styles = StyleSheet.create({
         height: 1,
         backgroundColor: 'rgba(255, 255, 255, 0.5)',
         marginVertical: 15,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingTop: 60,
+    },
+    emptyText: {
+        color: '#5D8AA8',
+        fontSize: 18,
+        marginTop: 15,
+    },
+    routeInfo: {
+        flex: 1,
+    },
+    taskCountText: {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    routeIdBadge: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+    },
+    routeIdText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: 'bold',
     },
 
     footerContainer: {
@@ -238,5 +400,61 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingBottom: 80,
         zIndex: 1,
+    },
+
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalContent: {
+        width: '85%',
+        maxHeight: '70%',
+        backgroundColor: '#1E3A5F',
+        borderRadius: 20,
+        padding: 20,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    modalTitle: {
+        color: '#FFFFFF',
+        fontSize: 22,
+        fontWeight: 'bold',
+    },
+    modalSubtitle: {
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 14,
+        marginBottom: 15,
+    },
+    modalList: {
+        marginTop: 10,
+    },
+    driverItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#427992',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 10,
+    },
+    driverInfo: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    driverName: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    driverCounty: {
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 12,
+        marginTop: 2,
     },
 })
