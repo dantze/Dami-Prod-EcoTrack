@@ -26,8 +26,8 @@ name: Deploy
 # THE ONE THING THAT CHANGED FOR APPLICATION CODE: the VPS served the SPA and
 # the API from one Caddy on one domain, so the browser's API call was
 # same-origin and CORS never applied. Cloud Run and Vercel are two origins, so
-# it does — `ECOTRACK_CORS_ALLOWED_ORIGINS` is computed and set in
-# `infra/main.tf`, and a wrong value there fails in the browser while both
+# it does — `ECOTRACK_CORS_ALLOWED_ORIGINS` is computed in `infra/main.tf` and
+# set on the service, and a wrong value there fails in the browser while both
 # services report themselves perfectly healthy.
 #
 # -----------------------------------------------------------------------------
@@ -36,7 +36,7 @@ name: Deploy
 #   GCP_CREDENTIALS_JSON  Full JSON of a GCP service-account key. The identity
 #                         that runs `terraform apply` needs admin rights over
 #                         SQL, IAM, networking and Secret Manager — see
-#                         infra/README.md, which explains why that is a bigger
+#                         DEPLOYMENT.md, which explains why that is a bigger
 #                         grant than the deployer service account Terraform
 #                         creates, and how to avoid the key entirely with
 #                         Workload Identity Federation.
@@ -135,7 +135,7 @@ jobs:
 
           if [ -n "$MISSING" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Cloud deploy not configured::Skipping the GCP and Vercel jobs. Missing repository secrets:$MISSING. This is expected until infra/ has been applied once — see infra/README.md."
+            echo "::notice title=Cloud deploy not configured::Skipping the GCP and Vercel jobs. Missing repository secrets:$MISSING. This is expected until infra/ has been applied once — see DEPLOYMENT.md."
             {
               echo "### Cloud deploy skipped"
               echo ""
@@ -214,7 +214,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
           # PREFERRED ALTERNATIVE — Workload Identity Federation, no key at all.
           # Delete credentials_json above and uncomment these two, after running
-          # the setup in infra/README.md:
+          # the setup in DEPLOYMENT.md:
           #
           # workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           # service_account: ${{ secrets.GCP_DEPLOYER_SA }}
@@ -230,7 +230,7 @@ jobs:
       # empty checkout. That means every run would believe nothing exists and
       # try to create it all again, which fails on the second run with "already
       # exists" on a dozen resources. Move state to GCS before trusting the
-      # apply below. providers.tf has the four-line block.
+      # apply below; DEPLOYMENT.md has the bucket commands and the block.
       - name: Check Terraform state is remote
         run: |
           if grep -rqE '^\s*backend\s+"' *.tf; then
@@ -362,8 +362,8 @@ jobs:
           provenance: false
 
       # Rolls a new revision at 100% traffic. Terraform deliberately ignores
-      # changes to the service's `image` (see the lifecycle block in main.tf),
-      # so this deploy is not reverted by the next apply.
+      # changes to the service's `image`, so this deploy is not reverted by the
+      # next apply. The nightly jobs need the same treatment, below.
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2

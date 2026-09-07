@@ -32,11 +32,14 @@ bump. An OTA cannot carry those.
 ## The shape, and the one thing it changed
 
 ```
-Vercel (static SPA, web/)  ──HTTPS──▶  Cloud Run (Spring Boot, backend/)
+Vercel (static SPA, web/)  ──HTTPS──▶  Cloud Run service (backend/)
         ▲                                       │
         │ VITE_API_BASE_URL, written by         │ private IP, VPC egress
         │ Terraform from the Cloud Run URL      ▼
         └───────────────────────────────  Cloud SQL (PostgreSQL 16)
+                                                ▲
+Cloud Scheduler ──▶ Cloud Run jobs ×2 ──────────┘
+  02:00 / 03:30      same image, `job` profile
 ```
 
 **Two origins, so CORS is load-bearing.** On the droplet, Caddy served the SPA
@@ -60,9 +63,8 @@ To reach it yourself, see *Getting a shell on the database* below.
 ## One-time setup
 
 **1. Accounts.** A GCP project with **billing enabled**, and a Vercel account.
-Cloud SQL is the whole bill and runs 24/7 whether or not anyone uses the app —
-budget ~$10–15/month at the default `db-f1-micro`, which is shared-core and
-carries **no SLA**. Vercel Hobby is free.
+Budget **~$15/month** before any traffic — see *Costs* below. Vercel Hobby is
+free.
 
 **2. Apply the infrastructure once, from a laptop.**
 
@@ -75,24 +77,53 @@ cp terraform.tfvars.example terraform.tfvars   # gitignored
 # fill in gcp_project_id and vercel_api_token
 
 terraform init
-terraform plan          # read it: ~25 resources, and it starts billing
+terraform plan          # read it: ~35 resources, and it starts billing
 terraform apply         # 15–25 min, nearly all of it Cloud SQL
-terraform output summary
+terraform output
 ```
 
-The first apply enables eight service APIs, so the very first `plan` can fail
+The first apply enables nine service APIs, so the very first `plan` can fail
 with `API has not been used in project … before`. Re-run it once.
 
-Cloud Run starts on a Google placeholder image, not the backend — the real image
-does not exist until CI pushes one. That is deliberate, and `infra/main.tf`
-marks the image field `ignore_changes` so a later `apply` never rolls a deployed
-revision back to the placeholder.
+Afterwards, the database password is in Secret Manager and nowhere else:
+
+```bash
+gcloud secrets versions access latest \
+  --secret="$(terraform output -raw database_password_secret_id)"
+```
+
+The Cloud Run service and both jobs start on a Google placeholder image, not the
+backend — the real image does not exist until CI pushes one. That is deliberate,
+and Terraform marks all three image fields `ignore_changes` so a later `apply`
+never rolls a deployed revision back to the placeholder. The deploy workflow is
+what rolls the image onto the service *and* onto each job.
 
 **3. Move Terraform state to GCS before CI applies anything.** `infra/providers.tf`
 ships with no backend block, so state is a local file. A GitHub runner starts
 with an empty checkout: run 1 creates everything, run 2 sees empty state and
-tries to create it all again. `infra/README.md` has the two commands and the
-four-line block.
+tries to create it all again, failing on a dozen "already exists" errors with no
+way to import what run 1 made except by hand.
+
+```bash
+gcloud storage buckets create gs://<your-tf-state-bucket> \
+  --location=europe-west1 --uniform-bucket-level-access
+gcloud storage buckets update gs://<your-tf-state-bucket> --versioning
+```
+
+Then add the block to `infra/providers.tf` and run `terraform init -migrate-state`:
+
+```hcl
+terraform {
+  backend "gcs" {
+    bucket = "<your-tf-state-bucket>"
+    prefix = "ecotrack/infra"
+  }
+}
+```
+
+The workflow prints a warning on every run until you do. State holds every value
+Terraform read or generated, the database password among them — the bucket is as
+sensitive as the secret.
 
 **4. GitHub → Settings → Secrets and variables → Actions → Secrets:**
 
@@ -129,11 +160,60 @@ office signpost in the app cannot compute one from the other (TODO-84). Deploy
 Mobile warns and still ships without it — the screen then says it does not know
 the address instead of guessing.
 
-**5. Read `infra/README.md` on who may run `terraform apply`.** The deployer
-service account Terraform creates can push images and roll revisions and
-nothing else. An identity that runs `apply` needs admin over SQL, IAM,
-networking and Secret Manager — close to project owner. The recommendation is
-option 1 there: apply from a laptop, let CI ship images only.
+**5. Decide who may run `terraform apply`.** Terraform creates three service
+accounts, each with the smallest role set that does its job:
+
+- **`<prefix>-run`** — what the Cloud Run service *and* both jobs run as. It
+  reads its own secrets (granted per secret, not project-wide) and writes logs
+  and metrics. Nothing else. Notably it is *not* the default Compute Engine
+  service account, which carries project-wide `roles/editor`.
+- **`<prefix>-deployer`** — for CI. `artifactregistry.writer` on this repository
+  only, `run.developer` (deploy revisions and update jobs, but not rewrite the
+  service's IAM policy, so a stolen CI token cannot open the API to the world),
+  and `serviceAccountUser` on the runtime account alone.
+- **`<prefix>-scheduler`** — what Cloud Scheduler authenticates as. `run.invoker`
+  on the two nightly jobs and nothing else.
+
+**The deployer cannot run `terraform apply`.** Creating SQL instances, service
+accounts, IAM bindings and VPC peerings needs admin roles across most of the
+project — roughly `cloudsql.admin` + `secretmanager.admin` +
+`iam.serviceAccountAdmin` + `resourcemanager.projectIamAdmin` +
+`compute.networkAdmin` + `run.admin` + `serviceusage.serviceUsageAdmin`, which
+together is close to owner. Granting that to the identity that also builds
+container images defeats the split. Three options, best first:
+
+1. **Apply from a laptop, let CI ship images.** Infrastructure changes rarely;
+   images change every commit. Run the `terraform` job on pull requests for
+   `plan` only and remove the `apply` step. `GCP_CREDENTIALS_JSON` then only
+   ever holds the narrow deployer.
+2. **A separate `terraform-admin` identity**, its key in a GitHub *environment*
+   with required reviewers, so an apply needs a human click.
+3. **`deployer_extra_roles`** — grant the deployer the admin roles above and
+   accept that CI holds near-owner. Off by default; it is a decision, not a
+   default.
+
+**Prefer Workload Identity Federation over a key.** `create_deployer_key = true`
+writes a never-expiring private key into `terraform.tfstate` **in plaintext**,
+which makes the state file as sensitive as the key. WIF issues short-lived
+tokens to this repo instead, with no key anywhere:
+
+```bash
+gcloud iam workload-identity-pools create github --location=global
+gcloud iam workload-identity-pools providers create-oidc github \
+  --location=global --workload-identity-pool=github \
+  --issuer-uri=https://token.actions.githubusercontent.com \
+  --attribute-mapping=google.subject=assertion.sub,attribute.repository=assertion.repository \
+  --attribute-condition="assertion.repository=='<owner>/<repo>'"
+
+gcloud iam service-accounts add-iam-policy-binding \
+  "$(terraform output -raw deployer_service_account)" \
+  --role=roles/iam.workloadIdentityUser \
+  --member="principalSet://iam.googleapis.com/projects/<PROJECT_NUMBER>/locations/global/workloadIdentityPools/github/attribute.repository/<owner>/<repo>"
+```
+
+Keep the `--attribute-condition`: without it, **any** GitHub repository can mint
+tokens for your service account. Then swap the two commented lines in
+`deploy.yml`'s auth step for `credentials_json`.
 
 **6. Mobile.** Set the `EXPO_PUBLIC_API_BASE_URL` **variable** to
 `terraform output -raw backend_api_base_url` plus `/api`, then run Deploy Mobile.
@@ -147,6 +227,29 @@ is what moves them.
 project and adds it to the backend's allowed CORS origins; it does not touch
 DNS. The backend keeps its `*.run.app` URL — there is no custom domain for the
 API.
+
+## Costs
+
+Roughly, `europe-west1`, defaults as written:
+
+| | |
+|---|---|
+| Cloud SQL `db-f1-micro`, 10 GB, ZONAL | ~$10/mo, and it runs 24/7 whether or not anyone uses the app |
+| Cloud Run service + the two nightly jobs | ~$5/mo — request-billed, scaled to zero out of hours |
+| Artifact Registry | ~$0.10/GB/mo, capped by the cleanup policy |
+| VPC, Secret Manager, Cloud Scheduler | cents |
+| Vercel Hobby | $0 |
+
+**~$15/month** before any traffic. Cloud SQL is the whole bill and is the one
+line that cannot scale to zero — it has no idle mode. The backend can, and does:
+`backend_min_instances` is 0 and there is no `cpu_idle` override, so an idle
+service costs nothing and the first request of the morning pays a JVM cold
+start. That is the accepted trade (TODO-80); it only became available once the
+nightly jobs stopped needing a live JVM.
+
+`db-f1-micro` is shared-core and carries **no SLA** — fine for a first deploy,
+not for customers. `terraform destroy` will refuse while
+`db_deletion_protection = true`, which is the point.
 
 ## First enrolment
 
@@ -196,9 +299,9 @@ The code is minted when the state is first observed, so hit `/api/enrollment/sta
 (just open the app) if nothing is in the log yet. It is **not** the same as
 `ECOTRACK_SETUP_CODE`, which is deliberately not accepted here.
 
-**Scale-to-zero note:** `backend_min_instances` is 0 by default, so an idle
-service has no running instance and therefore no recent logs. Open the app once
-to wake it before grepping.
+**Scale-to-zero note:** `backend_min_instances` is 0, so an idle service has no
+running instance and therefore no recent logs. Open the app once to wake it
+before grepping.
 
 ## Rollback
 
@@ -415,19 +518,25 @@ first would show drivers broken images.
   `web/scripts/fetch-ocr-assets.mjs`. **A web build needs network for that**, and
   fails loudly rather than shipping a scanner with no model. This runs on
   Vercel's builder now, not in a Docker image.
-- **`backend_min_instances` is 1 and must stay ≥ 1.** Not a performance
-  setting: the backend runs two nightly `@Scheduled` jobs (recurring-task
-  top-up at 02:00, session prune at 03:30), and Cloud Run runs no code when it
-  has scaled to zero — at 02:00 there is no traffic, so the jobs would simply
-  never fire, with nothing logged because nothing executes. The always-on
-  container this replaced had no such failure mode. Terraform refuses a value
-  below 1; TODO-80 is the cheaper alternative (Cloud Scheduler) if the
-  ~$10–15/month matters.
-- **Do not raise `backend_max_instances` casually.** Those `@Scheduled` jobs
-  run on *every* instance, so at 02:00 with more than one alive the recurring
-  top-up runs more than once concurrently, and nothing in the app guards
-  against that (no `@Version`, no lock — TODO-81). One container could not do
-  this.
+- **The nightly work is two Cloud Run Jobs, not a `@Scheduled` method.** The
+  recurring-task top-up (02:00) and the session prune (03:30) run as separate
+  one-shot executions of the same image, under `SPRING_PROFILES_ACTIVE=prod,job`
+  with `ECOTRACK_JOB` naming which one. Cloud Scheduler starts them, in
+  `Europe/Bucharest`. So `backend_min_instances` is free to be 0 (TODO-80), and
+  `backend_max_instances` is free to be raised — one execution runs one process,
+  not one per serving instance (TODO-81).
+- **A deploy must roll the jobs as well as the service.** All three ignore
+  Terraform's `image`, so the `gcloud run jobs update` step in `deploy.yml` is
+  what keeps the nightly jobs on the same commit as the API. A job left behind
+  fails silently at 02:00, in a place nobody is looking.
+- **Check a job by running it, not by waiting for 02:00:**
+  `gcloud run jobs execute <prefix>-generate-tasks --region <region> --wait`.
+  A non-zero exit means the run failed; an unknown or unset `ECOTRACK_JOB` is
+  one of the ways it can.
+- `infra/.terraform.lock.hcl` **is committed**, with hashes recorded for
+  `linux_amd64` as well as `darwin_arm64` — a lock file carrying only local
+  hashes makes `terraform init` fail on the Ubuntu runner. After adding a
+  provider: `terraform providers lock -platform=windows_amd64 -platform=linux_amd64 -platform=darwin_arm64`.
 - **There is no mobile ID scanner any more.** It went with the Sales section in
   TODO-33 — creating a client is a web-app job now, and the web scanner runs
   tesseract.js in the browser with no native module involved. This entry used to

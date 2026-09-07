@@ -114,3 +114,21 @@ web/.env
 # language model that never changes - a build step, not a commit, because a
 # binary blob in git history is permanent (see TODO-24).
 web/public/tesseract/
+
+# ------------------------------------
+# 6. Terraform (infra/)
+# ------------------------------------
+# State holds every value Terraform read or generated, the database password
+# among them. .terraform.lock.hcl is deliberately NOT ignored: it pins provider
+# versions and hashes, so CI resolves exactly what you resolved.
+infra/**/.terraform/
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/.terraform.tfstate.lock.info
+infra/**/*.tfvars
+infra/**/*.tfvars.json
+!infra/**/*.tfvars.example
+infra/**/*.tfplan
+infra/**/tfplan
+infra/**/crash.log
+infra/**/crash.*.log

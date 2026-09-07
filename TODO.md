@@ -27,21 +27,20 @@ unless its status says otherwise.
 **Status legend:** `[ ]` not started · `[~]` in progress · `[DONE]` done ·
 `[POSTPONED]` deliberately deferred · `[?]` needs a decision first
 
-**Next free ID: TODO-88.** (Highest used is TODO-87.)
+**Next free ID: TODO-90.** (Highest used is TODO-89.)
 
 ---
 
-## Still open — 7 of 87
+## Still open — 6 of 89
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
 - **TODO-17** `[POSTPONED]` — All other AI ideas *(F)*
 - **TODO-79** `[ ]` — The "GCP deployment" still depends on a DigitalOcean bucket *(G)*
-- **TODO-80** `[ ]` — Paying for a warm instance to run two cron jobs *(G)*
-- **TODO-81** `[ ]` — Both nightly jobs run on EVERY Cloud Run instance *(G)*
 - **TODO-82** `[ ]` — Two Mantine providers are mounted and neither is ever used *(G)*
 - **TODO-83** `[ ]` — `Button`'s default variant is `secondary`, and one screen relied on it by accident *(G)*
 - **TODO-87** `[ ]` — The bundle ceiling still describes headroom over a build CI no longer makes *(G)*
+- **TODO-89** `[ ]` — What `infra/` deliberately does not do *(G)*
 
 **Done, but flagged by whoever did it** — not open, but not finished-and-forgotten
 either:
@@ -137,14 +136,16 @@ full text lives further down.
 | TODO-77 | `[DONE]` | J | Two confirmation dialogs, with different accessibility |
 | TODO-78 | `[DONE]` | J | `.nvmrc` exists now but nothing tells a new contributor |
 | TODO-79 | **`[ ]`** | G | The "GCP deployment" still depends on a DigitalOcean bucket |
-| TODO-80 | **`[ ]`** | G | Paying for a warm instance to run two cron jobs |
-| TODO-81 | **`[ ]`** | G | Both nightly jobs run on EVERY Cloud Run instance |
+| TODO-80 | `[DONE]` | G | Paying for a warm instance to run two cron jobs |
+| TODO-81 | `[DONE]` | G | Both nightly jobs run on EVERY Cloud Run instance |
 | TODO-82 | **`[ ]`** | G | Two Mantine providers are mounted and neither is ever used |
 | TODO-83 | **`[ ]`** | G | `Button`'s default variant is `secondary`, and one screen relied on it by accident |
 | TODO-84 | `[DONE]` | H | The office signpost sends staff to the backend, not the web app |
 | TODO-85 | `[DONE]` | H | Cleartext HTTP is enabled app-wide, for a backend that is HTTPS-only |
 | TODO-86 | `[DONE]` | G | `python3` is gone again, so the hygiene guards ran nowhere for TODO-72/74 |
 | TODO-87 | **`[ ]`** | G | The bundle ceiling still describes headroom over a build CI no longer makes |
+| TODO-88 | `[DONE]` | G | The cost table priced a warm instance nobody had chosen |
+| TODO-89 | **`[ ]`** | G | What `infra/` deliberately does not do |
 
 ---
 
@@ -3231,7 +3232,7 @@ flip) that assume the bucket is where it is.
 Not urgent: nothing is broken and nothing is unsafe. It is a "how many bills do
 we want" question, and worth answering before more objects accumulate.
 
-### TODO-80 `[ ]` Paying for a warm instance to run two cron jobs
+### TODO-80 `[DONE]` Paying for a warm instance to run two cron jobs
 `backend_min_instances` is pinned at 1, and validated, because
 `RecurringTaskScheduler` (02:00) and `TokenService.pruneStaleSessions` (03:30)
 are Spring `@Scheduled` methods that need a live JVM holding CPU at that moment.
@@ -3255,7 +3256,27 @@ surface. An unauthenticated "run the nightly job" URL is a denial-of-service
 lever and a way to generate unbounded tasks, so the OIDC half is not optional —
 which is most of the work.
 
-### TODO-81 `[ ]` Both nightly jobs run on EVERY Cloud Run instance
+**Done — as Cloud Run Jobs, not as an HTTP endpoint.** The alternative sketched
+above was rejected on exactly the ground it names: an endpoint that runs the
+night's work is a new authenticated write on the public API, needing a
+`SecurityConfig` row, and it would still be reachable while the service is. Two
+`google_cloud_run_v2_job` resources on the same image have no URL at all. The
+process is `job/JobRunner.java`, an `ApplicationRunner` under a `job` profile
+that reads `ECOTRACK_JOB`, runs that one job and exits non-zero if it cannot;
+`@EnableScheduling` and both `@Scheduled` annotations are gone, along with
+`ecotrack.security.session-prune-cron`. Cloud Scheduler starts each job with an
+**OAuth** token (the jobs `:run` API does not take OIDC), as a third service
+account holding `run.invoker` on those two jobs and nothing else.
+
+With the JVM no longer needed at 02:00, `backend_min_instances` defaults to 0
+with no validation and the `cpu_idle` override is gone, so the service is
+request-billed: ~$58/month becomes ~$15, and the cost table moved to
+`DEPLOYMENT.md`. The accepted cost is one cold start on the first request of the
+morning. The one new failure mode is a deploy that rolls the service and forgets
+the jobs, so `deploy.yml` runs `gcloud run jobs update` on each of them from the
+`backend_job_names` output.
+
+### TODO-81 `[DONE]` Both nightly jobs run on EVERY Cloud Run instance
 The other half of TODO-71's scheduler problem, and the opposite of TODO-80.
 
 `@Scheduled` is per-JVM. One always-on container had exactly one, so both
@@ -3280,6 +3301,13 @@ establishes in this codebase), ShedLock, or moving the jobs out of the app
 entirely per TODO-80 — which solves this one too, since Cloud Scheduler fires
 once and hits one instance. That overlap is worth noting before either is
 picked.
+
+**Done, by the third option.** No lock and no ShedLock: there is no `@Scheduled`
+method left to run twice. Each night is one Cloud Run Job execution, `task_count
+= 1`, one process, whatever the service is doing at the time — so
+`backend_max_instances` is now an ordinary capacity setting with no hidden
+second meaning, and it dropped to 2. `max_retries = 1` means a failed execution
+is retried once and then left failed rather than looped.
 
 ### TODO-82 `[ ]` Two Mantine providers are mounted and neither is ever used
 Found while doing TODO-60. `src/theme/AppProviders.tsx` mounts `ModalsProvider`
@@ -3432,6 +3460,45 @@ Whichever it is, do it in a commit that changes only the number, so the first re
 build afterwards is unambiguous.
 
 *Found while doing TODO-55.*
+
+### TODO-88 `[DONE]` The cost table priced a warm instance nobody had chosen
+`infra/README.md` budgeted **~$20–27/month**, of which ~$10–15 was a Cloud Run
+instance kept alive for two cron jobs that take seconds — and the table said so,
+in a sentence explaining that neither big line could scale to zero. Only one of
+them genuinely could not: Cloud SQL has no idle mode, while the Cloud Run figure
+was a consequence of a design choice (TODO-80), not of the platform.
+
+Left as a separate item because it is a documentation problem in its own right:
+the figure was correct for what was built, and a reader comparing this
+deployment against alternatives would have been comparing against the wrong
+number.
+
+**Done with TODO-80.** The warm instance is gone, so the figure went with it.
+`infra/README.md` is an architecture diagram and nothing else now; the table
+lives in `DEPLOYMENT.md` and reads ~$10 Cloud SQL, ~$5 Cloud Run, **~$15/month**,
+with the one line that cannot scale to zero named as such.
+
+### TODO-89 `[ ]` What `infra/` deliberately does not do
+A record rather than a task, kept because the list it replaces was deleted with
+`infra/README.md`'s prose. None of these is a bug and none is scaffolded:
+
+- **No monitoring, alerting or uptime check.** Nothing notices a failed nightly
+  job execution or a service that stopped serving; the only channel is Cloud
+  Logging, which nobody is watching.
+- **No Cloud Armor or rate limiting** in front of Cloud Run. The service is
+  `allUsers`-invokable because the SPA's fetches come from the visitor's
+  browser, so the enrollment rate limit in the app is the only throttle.
+- **No custom domain for the backend.** Vercel gets the `*.run.app` URL. A
+  custom domain on the API would need its own mapping and a CORS re-apply.
+- **Nothing for `mobile/`.** It ships through EAS (`deploy-mobile.yml`), and its
+  two `EXPO_PUBLIC_*` variables are set by hand from Terraform outputs.
+- **No object storage.** Task photos still go to DigitalOcean Spaces — that is
+  TODO-79, and it is the only entry here with its own item.
+
+**Deciding it needs** nothing until the deployment is real: every one of these
+is a "once somebody depends on it" question, and nobody does yet — there is no
+GCP project. The first one to force itself will be monitoring, the first time a
+02:00 job fails and nothing says so.
 
 ## H. Mobile
 
