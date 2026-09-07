@@ -183,6 +183,7 @@ jobs:
       registry_host: ${{ steps.tf_outputs.outputs.registry_host }}
       image_repository: ${{ steps.tf_outputs.outputs.image_repository }}
       service_name: ${{ steps.tf_outputs.outputs.service_name }}
+      job_names: ${{ steps.tf_outputs.outputs.job_names }}
       backend_url: ${{ steps.tf_outputs.outputs.backend_url }}
       vercel_project_id: ${{ steps.tf_outputs.outputs.vercel_project_id }}
 
@@ -265,6 +266,7 @@ jobs:
             echo "registry_host=$(terraform output -raw artifact_registry_host)"
             echo "image_repository=$(terraform output -raw backend_image_repository)"
             echo "service_name=$(terraform output -raw backend_service_name)"
+            echo "job_names=$(terraform output -json backend_job_names | jq -r 'join(" ")')"
             echo "backend_url=$(terraform output -raw backend_url)"
             echo "vercel_project_id=$(terraform output -raw vercel_project_id)"
           } >> "$GITHUB_OUTPUT"
@@ -369,6 +371,21 @@ jobs:
           service: ${{ steps.coords.outputs.service }}
           region: ${{ env.GCP_REGION }}
           image: ${{ steps.coords.outputs.repo }}:${{ steps.coords.outputs.tag }}
+
+      # The nightly jobs run the same image as the service, and Terraform
+      # ignores changes to all three, so this is what rolls them forward.
+      - name: Roll the nightly jobs onto the new image
+        run: |
+          JOBS='${{ needs.terraform.outputs.job_names }}'
+          if [ -z "$JOBS" ]; then
+            JOBS="ecotrack-prod-generate-tasks ecotrack-prod-prune-sessions"
+            echo "::warning title=Using fallback job names::Terraform produced no outputs, falling back to the conventional names. Verify they match infra/."
+          fi
+          for JOB in $JOBS; do
+            gcloud run jobs update "$JOB" \
+              --image '${{ steps.coords.outputs.repo }}:${{ steps.coords.outputs.tag }}' \
+              --region "${GCP_REGION}" --quiet
+          done
 
       # The deploy above already waits for the revision to become ready, which
       # means the startup probe on /actuator/health passed. This asserts the

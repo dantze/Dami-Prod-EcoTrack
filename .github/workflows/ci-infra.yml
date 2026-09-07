@@ -88,15 +88,15 @@ jobs:
       # the whole directory unsafe to publish.
       - name: No hardcoded credentials
         run: |
-          # Any credential-shaped ATTRIBUTE assigned a literal string. A var or
-          # a local reference is unquoted (`password = local.db_password`), so
-          # this fires only on the thing it is meant to catch.
-          if grep -nE '^[[:space:]]*(credentials|api_token|password|secret_data|private_key|token|project|project_id|team)[[:space:]]*=[[:space:]]*"' ./*.tf; then
+          # Recursive, so modules/** is covered. A var or a local reference is
+          # unquoted (`password = local.password`), so this fires only on the
+          # thing it is meant to catch.
+          if grep -rnE --include='*.tf' '^[[:space:]]*(credentials|api_token|password|secret_data|private_key|token|project|project_id|team)[[:space:]]*=[[:space:]]*"' .; then
             echo "::error file=infra/variables.tf::a .tf file assigns a literal to a credential attribute. Move it to a variable — see the rule at the top of variables.tf."
             exit 1
           fi
 
-          if grep -nE '(AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' ./*.tf; then
+          if grep -rnE --include='*.tf' '(AIza[0-9A-Za-z_-]{35}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' .; then
             echo "::error file=infra/::a .tf file contains key material."
             exit 1
           fi
