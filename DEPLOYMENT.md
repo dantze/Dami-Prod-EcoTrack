@@ -7,9 +7,9 @@ on every deploy.
 
 > **This replaced a single DigitalOcean droplet** running backend + web +
 > Postgres + Caddy as one `docker compose` stack. That droplet is gone, and the
-> workflow that deployed to it had been gated off since TODO-32. `docker-compose.yml`
-> and the `Caddyfile` are still here and still work — they are the LOCAL
-> full-stack environment now, and are deployed nowhere.
+> workflow that deployed to it had been gated off since TODO-32.
+> `docker-compose.yml` survives as Postgres + the backend, for local work only
+> (TODO-91).
 
 ## Triggers
 
@@ -377,30 +377,35 @@ gcloud secrets versions access latest --secret="$(terraform output -raw database
 
 ## Local
 
-Unchanged, and deliberately still one origin:
+**Docker is not required to run this app locally.** The everyday loop is two
+commands and no containers:
+
+```bash
+cd backend && ./gradlew bootRun     # H2 file DB at backend/data/damiprod
+cd web     && npm run dev           # http://localhost:5173, mock data
+```
+
+Docker buys exactly one thing: **the backend against real Postgres**, which is
+what production runs and what H2 is not. `ddl-auto=update` with no migration
+tool makes that gap worth closing before anything schema-shaped ships.
 
 ```bash
 cp .env.example .env     # set DB_PASS
 docker compose up -d --build
-```
-→ `https://localhost` (self-signed warning expected).
-
-**This no longer resembles production, in one specific way.** Caddy serves the
-SPA and proxies `/api` on the same host, so every API call is same-origin —
-which means **a CORS misconfiguration cannot be reproduced locally**. That is
-the one class of bug you have to find in a deployed environment. Everything
-else — the backend, Postgres, the SPA, enrolment, photos — behaves the same.
-
-For a two-origin local setup closer to production, run the backend from compose
-and the frontend from Vite instead:
-
-```bash
-docker compose up -d --build postgres backend
 cd web && VITE_DATA_MODE=live VITE_API_BASE_URL=http://localhost:8080/api npm run dev
 ```
 
 That needs `ECOTRACK_CORS_ALLOWED_ORIGINS` to include `http://localhost:5173`,
 which `.env.example` sets.
+
+This is **two origins** — the SPA on 5173, the API on 8080 — which is the shape
+production has. The full-stack Caddy recipe that used to be here was one origin
+and is gone (TODO-91): it could not reproduce a CORS failure, and it taught a
+layout no deployment has any more. Two things still will not work locally: task
+photo upload needs a real GCS bucket and Application Default Credentials, and
+the nightly jobs are Cloud Run Jobs, so run them with
+`ECOTRACK_JOB=generate-tasks ./gradlew bootRun --args='--spring.profiles.active=prod,job'`
+if you need to exercise one.
 
 ## Mobile cutover — moving the phones off the droplet (TODO-72)
 

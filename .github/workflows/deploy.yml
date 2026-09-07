@@ -8,8 +8,8 @@ name: Deploy
 # DigitalOcean droplet. That droplet no longer exists and the workflow had been
 # gated off behind a `DEPLOY_ENABLED` variable since TODO-32; `git log
 # .github/workflows/deploy.yml` has it if you need to read it. `docker-compose.yml`
-# and the `Caddyfile` survive as the LOCAL full-stack environment and are no
-# longer deployed anywhere — see DEPLOYMENT.md.
+# survives as a LOCAL Postgres + backend environment and is deployed nowhere —
+# see DEPLOYMENT.md.
 #
 # Four steps, in order:
 #

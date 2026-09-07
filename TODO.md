@@ -27,11 +27,11 @@ unless its status says otherwise.
 **Status legend:** `[ ]` not started · `[~]` in progress · `[DONE]` done ·
 `[POSTPONED]` deliberately deferred · `[?]` needs a decision first
 
-**Next free ID: TODO-91.** (Highest used is TODO-90.)
+**Next free ID: TODO-92.** (Highest used is TODO-91.)
 
 ---
 
-## Still open — 5 of 90
+## Still open — 5 of 91
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
@@ -146,6 +146,7 @@ full text lives further down.
 | TODO-88 | `[DONE]` | G | The cost table priced a warm instance nobody had chosen |
 | TODO-89 | **`[ ]`** | G | What `infra/` deliberately does not do |
 | TODO-90 | `[DONE]` | G | Vercel was in Terraform and bought nothing |
+| TODO-91 | `[DONE]` | G | The local Docker stack still modelled the droplet |
 
 ---
 
@@ -3572,6 +3573,48 @@ fallback, so this promoted the fallback to the path.
 **What it costs, and it is worth naming:** the Vercel project's build settings
 are dashboard state, in no file. `DEPLOYMENT.md` step 1b is the record of what
 they should be, and nothing checks it.
+
+### TODO-91 `[DONE]` The local Docker stack still modelled the droplet
+Asked whether Docker was still needed at all. Three separate answers, and only
+one of them was "yes".
+
+`backend/Dockerfile` is **permanent**: Cloud Run runs container images, and that
+one image is what the service and both nightly jobs run. It is built on the
+GitHub runner, so no Docker is needed on a developer machine for it.
+
+`docker-compose.yml` was the whole droplet — Postgres, backend, the SPA and
+Caddy terminating TLS for both on ONE origin. Production has been two origins
+since TODO-71, so the full-stack recipe modelled a shape that no longer exists:
+it could not reproduce a CORS failure, which is precisely the class of bug this
+deployment can produce and the old one could not. It was also not how anyone
+runs the backend — `./gradlew bootRun` on H2 is, and always was.
+
+`docker-compose.dev-hosted.yml` was a hosted dev environment for UI and mobile
+testing. Cloud Run is that now, and nothing referenced the file except its own
+header comment and two guard scripts' companion lists.
+
+**Done.** `docker-compose.dev-hosted.yml`, the `Caddyfile` and `web/Dockerfile`
+are deleted, and `docker-compose.yml` is Postgres + the backend. What survives is
+the one capability `bootRun` cannot offer: **the backend against real Postgres**,
+which matters because production is Postgres, local defaults to H2, and
+`ddl-auto=update` has no migration tool behind it. `DEPLOYMENT.md`'s *Local*
+section leads with the no-Docker loop and presents compose as the Postgres
+option, paired with `npm run dev` — a two-origin arrangement, i.e. production's
+shape.
+
+Deleting `web/Dockerfile` has a second effect worth naming: it was the last
+place a `VITE_*` default could disagree with the deployed one, which TODO-54 and
+TODO-87 both had to reason around. `config.ts`'s `/api` fallback is now purely a
+diagnostic for a build that forgot the variable; no build produces it on purpose.
+
+One guard bug fell out of it. `repo_hygiene.py`'s CI-coverage check read
+`git diff --name-only`, which lists DELETED paths alongside changed ones, and
+asked which workflow watches them — so removing `Caddyfile` and
+`docker-compose.dev-hosted.yml` failed the check for the very NO_CI_REQUIRED
+entries that were correctly deleted with them. The alternative was leaving
+tombstone entries in that set forever. It skips paths that no longer exist now.
+
+*Found while doing TODO-79.*
 
 ## H. Mobile
 

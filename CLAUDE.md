@@ -55,9 +55,12 @@ created by hand, and `deploy.yml` writes `VITE_API_BASE_URL` and
 knows the project's NAME, because the backend's CORS list is computed from it.
 
 It replaced a single DigitalOcean droplet that ran backend + web + Postgres +
-Caddy under one `docker compose` (TODO-71). **`docker-compose.yml` and the
-`Caddyfile` are still here and still work — they are the LOCAL stack now**, and
-are deployed nowhere.
+Caddy under one `docker compose` (TODO-71). **What is left of that is
+`docker-compose.yml`, cut down to Postgres + the backend** (TODO-91): the SPA,
+`web/Dockerfile` and the `Caddyfile` are gone, because serving both from one
+origin modelled a shape production no longer has. It is deployed nowhere, and it
+is not the normal way to run the backend either — `./gradlew bootRun` is, on H2.
+Compose is for the one thing bootRun cannot do: run against real Postgres.
 
 Five things hold that description up, all easy to undo by accident:
 
@@ -116,7 +119,8 @@ cd backend
 ./gradlew bootRun                # H2 file DB
 ./gradlew bootRun --args='--spring.profiles.active=dev'    # same H2 DB
 
-# docker (full stack: postgres + backend + web + caddy with auto HTTPS)
+# docker (postgres + backend only; the SPA runs from `npm run dev`)
+# Not needed day to day - bootRun above uses H2. This is for real Postgres.
 docker compose up -d --build
 docker compose logs -f backend
 docker compose down
@@ -554,11 +558,11 @@ Vite inlines both at build time. The absolute URL is why the frontend must be
 rebuilt whenever the backend URL changes, and why `deploy.yml` redeploys Vercel
 after Cloud Run rather than in parallel with it.
 
-`web/Dockerfile` still exists and still defaults to a relative
-`VITE_API_BASE_URL=/api`, because it now builds the LOCAL compose stack, where
-Caddy does serve both from one origin. Production is not that shape any more:
-`config.ts`'s `/api` fallback is a diagnostic for a build that forgot the
-variable, not the deployment.
+`web/Dockerfile` is gone (TODO-91) — nothing built the SPA into an image once
+Caddy went, and while it existed it was a second place a `VITE_*` default could
+drift from the deployed one. `config.ts`'s `/api` fallback is now purely a
+diagnostic for a build that forgot the variable; no build produces it on
+purpose.
 
 **`src/api/live/normalize.ts` absorbs the wire/domain mismatch.** The Spring
 entities do not serialise cleanly into `@/types/domain`: associations are
