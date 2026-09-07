@@ -6,7 +6,6 @@ import com.example.damiProd.repository.SessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -336,9 +335,10 @@ public class TokenService {
      * Deletes sessions that stopped being usable more than
      * {@code ecotrack.security.session-retention-days} ago (revoked or expired).
      * Keeps the table - and therefore the set of hashes an attacker could ever
-     * work with - bounded, and runs nightly rather than on the request path.
+     * work with - bounded, and runs nightly rather than on the request path -
+     * as the {@code prune-sessions} Cloud Run Job, via
+     * {@link com.example.damiProd.job.JobRunner}.
      */
-    @Scheduled(cron = "${ecotrack.security.session-prune-cron:0 30 3 * * *}")
     @Transactional
     public int pruneStaleSessions() {
         Instant cutoff = Instant.now().minus(sessionRetention);

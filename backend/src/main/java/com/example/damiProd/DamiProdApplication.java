@@ -3,7 +3,6 @@ package com.example.damiProd;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 // UserDetailsServiceAutoConfiguration is excluded because auth here is entirely
 // token-based (see config/SecurityConfig + config/BearerTokenAuthenticationFilter):
@@ -11,7 +10,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 // without this exclusion Boot auto-configures a pointless in-memory user and logs
 // a "Using generated security password" line on every startup.
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
-@EnableScheduling
 public class DamiProdApplication {
 
 	public static void main(String[] args) {
