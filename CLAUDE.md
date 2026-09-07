@@ -36,6 +36,15 @@ to. **The `.tf` files carry no comments**; what used to be written in them is in
 this file. `deploy.yml` applies it; `ci-infra.yml` is its path-filtered gate
 (`terraform fmt` + `validate`, no credentials needed).
 
+**There is one deployment, named `dev`.** `var.environment` is a token in every
+resource name (`ecotrack-dev-postgres`) and nothing else — there is no staging
+and no second stack. **It is not the Spring profile.** `spring_profiles_active`
+stays `prod` regardless, because that is what selects Postgres; a container
+running the Spring `dev` profile would use the H2 file DB in ephemeral container
+storage, and with `min_instances = 0` every write would vanish the moment the
+instance went away. The fallback names in `deploy.yml` follow the same
+`ecotrack-dev-*` shape and must be changed with it.
+
 **Vercel is deliberately NOT in Terraform.** It was, and everything it managed
 was a one-time setting — the project, its build commands, its two `VITE_*`
 variables — bought at the price of a Vercel token in the blast radius of every

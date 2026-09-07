@@ -10,13 +10,13 @@ variable "project_name" {
 }
 
 variable "environment" {
-  description = "Deployment environment, part of every resource name and label."
+  description = "Name token in every resource name and label. One deployment exists; this is not the Spring profile, which is spring_profiles_active."
   type        = string
-  default     = "prod"
+  default     = "dev"
 
   validation {
-    condition     = contains(["dev", "staging", "prod"], var.environment)
-    error_message = "environment must be one of: dev, staging, prod."
+    condition     = can(regex("^[a-z][a-z0-9-]{1,10}$", var.environment))
+    error_message = "environment must be 2-11 chars, start with a letter, and contain only lowercase letters, digits and hyphens."
   }
 }
 
@@ -199,7 +199,7 @@ variable "scheduler_time_zone" {
 }
 
 variable "spring_profiles_active" {
-  description = "SPRING_PROFILES_ACTIVE for the service. Each job appends `job` to it."
+  description = "SPRING_PROFILES_ACTIVE for the service; each job appends `job`. Stays `prod` whatever `environment` says - it is what selects Postgres over the H2 file DB."
   type        = string
   default     = "prod"
 }

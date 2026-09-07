@@ -331,8 +331,8 @@ jobs:
           REPO='${{ needs.terraform.outputs.image_repository }}'
           SERVICE='${{ needs.terraform.outputs.service_name }}'
           if [ -z "$REPO" ]; then
-            REPO="${GCP_REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ecotrack-prod-backend/backend"
-            SERVICE="ecotrack-prod-backend"
+            REPO="${GCP_REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ecotrack-dev-backend/backend"
+            SERVICE="ecotrack-dev-backend"
             echo "::warning title=Using fallback image path::Terraform produced no outputs, falling back to the conventional name. Verify it matches infra/."
           fi
           echo "repo=$REPO"       >> "$GITHUB_OUTPUT"
@@ -381,7 +381,7 @@ jobs:
         run: |
           JOBS='${{ needs.terraform.outputs.job_names }}'
           if [ -z "$JOBS" ]; then
-            JOBS="ecotrack-prod-generate-tasks ecotrack-prod-prune-sessions"
+            JOBS="ecotrack-dev-generate-tasks ecotrack-dev-prune-sessions"
             echo "::warning title=Using fallback job names::Terraform produced no outputs, falling back to the conventional names. Verify they match infra/."
           fi
           for JOB in $JOBS; do
