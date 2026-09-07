@@ -229,73 +229,15 @@ variable "create_deployer_key" {
   default     = false
 }
 
-variable "vercel_api_token" {
-  description = "Vercel API token."
-  type        = string
-  sensitive   = true
-}
-
-variable "vercel_team_id" {
-  description = "Vercel team id. Empty for a personal account."
-  type        = string
-  default     = ""
-}
-
 variable "vercel_project_name" {
-  description = "Vercel project holding the web SPA. The CORS origin list is computed from it."
+  description = "Vercel project holding the web SPA. Terraform does not create it; the name is what the CORS origin list and frontend_url are computed from."
   type        = string
   default     = "ecotrack-web"
 }
 
-variable "vercel_git_repository" {
-  description = "GitHub repo as owner/name to connect for automatic deploys. Empty creates the project unconnected."
-  type        = string
-  default     = ""
-}
-
-variable "vercel_production_branch" {
-  description = "Branch Vercel treats as production."
-  type        = string
-  default     = "main"
-}
-
-variable "web_root_directory" {
-  description = "Path within the monorepo that Vercel builds."
-  type        = string
-  default     = "web"
-}
-
-variable "web_install_command" {
-  description = "Vercel install step."
-  type        = string
-  default     = "npm ci"
-}
-
-variable "web_build_command" {
-  description = "Vercel build step."
-  type        = string
-  default     = "npm run build"
-}
-
-variable "web_output_directory" {
-  description = "Directory Vercel serves after the build."
-  type        = string
-  default     = "dist"
-}
-
 variable "web_custom_domains" {
-  description = "Custom domains attached to the Vercel project. Each one also becomes an allowed CORS origin."
+  description = "Custom domains serving the SPA. Attach them in Vercel; listing them here is what adds them to the backend's allowed CORS origins."
   type        = list(string)
   default     = []
 }
 
-variable "web_data_mode" {
-  description = "VITE_DATA_MODE for the deployed frontend."
-  type        = string
-  default     = "live"
-
-  validation {
-    condition     = contains(["live", "mock"], var.web_data_mode)
-    error_message = "web_data_mode must be live or mock."
-  }
-}

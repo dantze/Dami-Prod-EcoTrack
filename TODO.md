@@ -27,11 +27,11 @@ unless its status says otherwise.
 **Status legend:** `[ ]` not started · `[~]` in progress · `[DONE]` done ·
 `[POSTPONED]` deliberately deferred · `[?]` needs a decision first
 
-**Next free ID: TODO-90.** (Highest used is TODO-89.)
+**Next free ID: TODO-91.** (Highest used is TODO-90.)
 
 ---
 
-## Still open — 6 of 89
+## Still open — 6 of 90
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
@@ -146,6 +146,7 @@ full text lives further down.
 | TODO-87 | **`[ ]`** | G | The bundle ceiling still describes headroom over a build CI no longer makes |
 | TODO-88 | `[DONE]` | G | The cost table priced a warm instance nobody had chosen |
 | TODO-89 | **`[ ]`** | G | What `infra/` deliberately does not do |
+| TODO-90 | `[DONE]` | G | Vercel was in Terraform and bought nothing |
 
 ---
 
@@ -3492,6 +3493,7 @@ A record rather than a task, kept because the list it replaces was deleted with
   custom domain on the API would need its own mapping and a CORS re-apply.
 - **Nothing for `mobile/`.** It ships through EAS (`deploy-mobile.yml`), and its
   two `EXPO_PUBLIC_*` variables are set by hand from Terraform outputs.
+- **Nothing for Vercel.** It did, until TODO-90 removed it.
 - **No object storage.** Task photos still go to DigitalOcean Spaces — that is
   TODO-79, and it is the only entry here with its own item.
 
@@ -3499,6 +3501,46 @@ A record rather than a task, kept because the list it replaces was deleted with
 is a "once somebody depends on it" question, and nobody does yet — there is no
 GCP project. The first one to force itself will be monitoring, the first time a
 02:00 job fails and nothing says so.
+
+### TODO-90 `[DONE]` Vercel was in Terraform and bought nothing
+Asked directly what managing the Vercel project in Terraform did for this
+deployment, the honest answer was: nothing that is not a one-time setting.
+Creating the project, its four build settings, its two `VITE_*` variables and a
+custom domain are each done once, in about two minutes of clicking.
+
+The one argument that looked strong — Terraform reads the Cloud Run URL off the
+resource and writes it into `VITE_API_BASE_URL`, which cannot be typed ahead of
+time — does not survive contact with the fact that a Cloud Run v2 URL is derived
+from the service name and a per-project hash. It is stable across redeploys and
+across a delete-and-recreate; it moves only if the service is renamed or the
+region changes.
+
+Against that, the costs were charged continuously: `terraform apply` needed a
+Vercel API token, so a Vercel credential sat in the blast radius of every
+database change; `terraform plan` needed Vercel reachable to plan a VPC edit; a
+build setting changed in the dashboard was silently reverted by the next apply;
+and a partner provider had to be tracked in the lock file. Those trades are
+worth making for a second environment or a team, and this is neither.
+
+**Done.** `modules/frontend`, the `vercel` provider and nine variables
+(`vercel_api_token`, `vercel_team_id`, `vercel_git_repository`,
+`vercel_production_branch`, `web_root_directory`, `web_install_command`,
+`web_build_command`, `web_output_directory`, `web_data_mode`) are gone;
+`terraform.tfvars.example` is down to one line. `vercel_project_name` and
+`web_custom_domains` stay, because the backend's CORS origin list is computed
+from them and always was — nothing was ever read back off a Vercel resource.
+
+Two things moved rather than disappeared. `deploy.yml` writes
+`VITE_API_BASE_URL` and `VITE_DATA_MODE` onto the project with `vercel env`
+before every build, from the `backend_api_base_url` output, which is strictly
+better than the apply-time write it replaces: it is re-asserted on every deploy
+instead of only when Terraform runs. And `VERCEL_PROJECT_ID` is a required
+secret now rather than a Terraform output — `deploy.yml` already carried it as a
+fallback, so this promoted the fallback to the path.
+
+**What it costs, and it is worth naming:** the Vercel project's build settings
+are dashboard state, in no file. `DEPLOYMENT.md` step 1b is the record of what
+they should be, and nothing checks it.
 
 ## H. Mobile
 

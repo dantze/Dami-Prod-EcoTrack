@@ -26,16 +26,23 @@ on purpose and runs on every PR; it is the only check that covers files no
 project workflow watches. `audit.yml` is scheduled, not a PR gate. See the
 `verify` skill for which checks a given diff actually needs.
 
-**`infra/` describes the whole deployment**, in Terraform: Cloud Run (one
-service and two jobs), Cloud SQL, Artifact Registry, Secret Manager, Cloud
-Scheduler, a VPC, three least-privilege service accounts, and the Vercel
-project. Six modules under `infra/modules/` — `network`, `database`, `registry`,
-`iam`, `backend`, `frontend` — with `infra/main.tf` holding only locals, the API
-enablement and the module wiring, and the root `variables.tf` / `outputs.tf`
-holding every name `deploy.yml` binds to. **The `.tf` files carry no comments**;
-what used to be written in them is in this file. `deploy.yml` applies it;
-`ci-infra.yml` is its path-filtered gate (`terraform fmt` + `validate`, no
-credentials needed).
+**`infra/` describes the GCP half of the deployment**, in Terraform: Cloud Run
+(one service and two jobs), Cloud SQL, Artifact Registry, Secret Manager, Cloud
+Scheduler, a VPC and three least-privilege service accounts. Five modules under
+`infra/modules/` — `network`, `database`, `registry`, `iam`, `backend` — with
+`infra/main.tf` holding only locals, the API enablement and the module wiring,
+and the root `variables.tf` / `outputs.tf` holding every name `deploy.yml` binds
+to. **The `.tf` files carry no comments**; what used to be written in them is in
+this file. `deploy.yml` applies it; `ci-infra.yml` is its path-filtered gate
+(`terraform fmt` + `validate`, no credentials needed).
+
+**Vercel is deliberately NOT in Terraform.** It was, and everything it managed
+was a one-time setting — the project, its build commands, its two `VITE_*`
+variables — bought at the price of a Vercel token in the blast radius of every
+`terraform apply` and dashboard edits being silently reverted. So the project is
+created by hand, and `deploy.yml` writes `VITE_API_BASE_URL` and
+`VITE_DATA_MODE` onto it with `vercel env` before each build. Terraform still
+knows the project's NAME, because the backend's CORS list is computed from it.
 
 It replaced a single DigitalOcean droplet that ran backend + web + Postgres +
 Caddy under one `docker compose` (TODO-71). **`docker-compose.yml` and the
@@ -46,13 +53,13 @@ Five things hold that description up, all easy to undo by accident:
 
 - **CORS is load-bearing.** Caddy served the SPA and the API from one origin;
   Vercel and Cloud Run are two. `infra/main.tf` computes
-  `ECOTRACK_CORS_ALLOWED_ORIGINS` from the Vercel **project name**, not from the
-  Vercel resource — the Vercel project reads the Cloud Run URL, so reading a
-  Vercel attribute back would be a dependency cycle Terraform refuses to plan.
-  The production alias is deterministically `<project-name>.vercel.app`, so
-  nothing is lost. Local compose is still one origin, so **a CORS failure cannot
-  be reproduced locally** — it is the one class of bug this deployment can
-  produce that the old one could not.
+  `ECOTRACK_CORS_ALLOWED_ORIGINS` from `var.vercel_project_name` plus
+  `var.web_custom_domains`, because Vercel's production alias is
+  deterministically `<project-name>.vercel.app`. Nothing reads it back off
+  Vercel, so **renaming the Vercel project means editing that variable and
+  re-applying** — otherwise the backend refuses the frontend. Local compose is
+  still one origin, so **a CORS failure cannot be reproduced locally** — it is
+  the one class of bug this deployment can produce that the old one could not.
 - **The nightly work runs as Cloud Run Jobs, and the backend scales to zero.**
   There are no `@Scheduled` methods left. `job/JobRunner.java` is an
   `ApplicationRunner` under the `job` profile: it reads `ECOTRACK_JOB`
@@ -530,11 +537,12 @@ or `@/mocks` directly. That rule is the only thing keeping the two implementatio
 substitutable. The `web-data-layer` skill has the full procedure.
 
 Mock is the default for local development, where it needs no backend at all.
-**Production builds live mode**, on Vercel: Terraform writes `VITE_DATA_MODE=live`
-and an ABSOLUTE `VITE_API_BASE_URL` — the Cloud Run URL plus `/api` — into the
-Vercel project, and Vite inlines both at build time. The absolute URL is why the
-frontend must be rebuilt whenever the backend URL changes, and why `deploy.yml`
-redeploys Vercel after Cloud Run rather than in parallel with it.
+**Production builds live mode**, on Vercel: `deploy.yml` writes
+`VITE_DATA_MODE=live` and an ABSOLUTE `VITE_API_BASE_URL` — the Cloud Run URL
+plus `/api` — onto the Vercel project with `vercel env`, on every deploy, and
+Vite inlines both at build time. The absolute URL is why the frontend must be
+rebuilt whenever the backend URL changes, and why `deploy.yml` redeploys Vercel
+after Cloud Run rather than in parallel with it.
 
 `web/Dockerfile` still exists and still defaults to a relative
 `VITE_API_BASE_URL=/api`, because it now builds the LOCAL compose stack, where

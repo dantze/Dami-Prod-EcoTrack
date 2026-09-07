@@ -1,7 +1,9 @@
 # Deployment
 
 Backend on **Cloud Run**, database on **Cloud SQL** (PostgreSQL), frontend on
-**Vercel**, all of it described by Terraform in `infra/`.
+**Vercel**. The GCP half is described by Terraform in `infra/`; the Vercel
+project is created by hand and `deploy.yml` writes its two build-time variables
+on every deploy.
 
 > **This replaced a single DigitalOcean droplet** running backend + web +
 > Postgres + Caddy as one `docker compose` stack. That droplet is gone, and the
@@ -66,6 +68,26 @@ To reach it yourself, see *Getting a shell on the database* below.
 Budget **~$15/month** before any traffic — see *Costs* below. Vercel Hobby is
 free.
 
+**1b. Create the Vercel project by hand**, once. Terraform does not manage it —
+everything it would manage is a one-time setting, and having it managed meant a
+Vercel token in the blast radius of every `terraform apply`. Import the repo, or
+`vercel link` from `web/`, and set:
+
+| Setting | Value |
+|---|---|
+| Framework preset | Vite |
+| Root directory | `web` |
+| Install command | `npm ci` |
+| Build command | `npm run build` |
+| Output directory | `dist` |
+| Ignored build step | `git diff --quiet HEAD^ HEAD -- web shared` |
+
+Leave the environment variables alone: `deploy.yml` writes `VITE_API_BASE_URL`
+and `VITE_DATA_MODE` before each build, and overwrites whatever is there. Note
+the project **name** — it has to match the `VERCEL_PROJECT_NAME` variable below,
+because that is what the backend's allowed CORS origins are computed from — and
+the project **id**, which is the `VERCEL_PROJECT_ID` secret.
+
 **2. Apply the infrastructure once, from a laptop.**
 
 ```bash
@@ -74,10 +96,10 @@ gcloud config set project <your-project-id>
 
 cd infra
 cp terraform.tfvars.example terraform.tfvars   # gitignored
-# fill in gcp_project_id and vercel_api_token
+# fill in gcp_project_id (the only value with no default)
 
 terraform init
-terraform plan          # read it: ~35 resources, and it starts billing
+terraform plan          # read it: ~30 resources, and it starts billing
 terraform apply         # 15–25 min, nearly all of it Cloud SQL
 terraform output
 ```
@@ -129,14 +151,17 @@ sensitive as the secret.
 
 ```
 GCP_CREDENTIALS_JSON   GCP_PROJECT_ID
-VERCEL_API_TOKEN       VERCEL_ORG_ID
+VERCEL_API_TOKEN       VERCEL_ORG_ID       VERCEL_PROJECT_ID
 EXPO_TOKEN                       # expo.dev → Account → Access tokens
 ```
+
+`VERCEL_PROJECT_ID` comes from the project you made in step 1b — Settings →
+General, or `.vercel/project.json` after `vercel link`. For a Team account,
+`VERCEL_ORG_ID` is the team id and the CLI needs nothing else.
 
 Optional:
 
 ```
-VERCEL_TEAM_ID           # only if the Vercel project is under a Team
 BACKEND_SECRETS_JSON     # {"DO_SPACES_ACCESS_KEY":"…","DO_SPACES_SECRET_KEY":"…"}
 ```
 
@@ -222,11 +247,12 @@ until an update ships; the workflow refuses to ship at all while the variable is
 unset. Phones in the field were bundled against the droplet — the cutover below
 is what moves them.
 
-**7. Custom domains** (optional). Add them to `web_custom_domains` in
-`terraform.tfvars` and point DNS at Vercel. Terraform claims the domain on the
-project and adds it to the backend's allowed CORS origins; it does not touch
-DNS. The backend keeps its `*.run.app` URL — there is no custom domain for the
-API.
+**7. Custom domains** (optional). **Two places, and both are needed.** Add the
+domain to the Vercel project and point DNS at Vercel; then add it to
+`web_custom_domains` in `terraform.tfvars` and re-apply, which is what puts it
+in the backend's allowed CORS origins. Doing only the first gives you a domain
+that loads the app and cannot call the API. The backend keeps its `*.run.app`
+URL — there is no custom domain for the API.
 
 ## Costs
 
@@ -504,6 +530,14 @@ first would show drivers broken images.
 
 - `ECOTRACK_SECURITY_ENFORCE=true` logs out every device on a pre-token build.
   Ship mobile, confirm rollout, *then* flip.
+- **Renaming the Vercel project breaks CORS until Terraform is re-applied.**
+  The allowed-origin list is computed from `vercel_project_name`, and nothing
+  reads it back off Vercel — the app will load and every call will be refused.
+  Same for a custom domain added only on the Vercel side.
+- **Vercel build settings are not in version control.** Root directory, build
+  command and the ignored-build-step are dashboard state since Terraform stopped
+  managing the project; the values are in step 1b. The two `VITE_*` variables
+  are the exception — `deploy.yml` overwrites them on every deploy.
 - `VITE_*` / `EXPO_PUBLIC_*` are **bundle-time**, not runtime — changing one and
   restarting the app does nothing. But bundle-time is not the same as *binary*
   time on mobile: `eas update` re-bundles, so an OTA does repoint an installed

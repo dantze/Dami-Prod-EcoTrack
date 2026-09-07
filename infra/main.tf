@@ -132,18 +132,3 @@ module "backend" {
 
   depends_on = [module.database, module.iam, google_project_service.required]
 }
-
-module "frontend" {
-  source = "./modules/frontend"
-
-  project_name      = var.vercel_project_name
-  root_directory    = var.web_root_directory
-  install_command   = var.web_install_command
-  build_command     = var.web_build_command
-  output_directory  = var.web_output_directory
-  git_repository    = var.vercel_git_repository
-  production_branch = var.vercel_production_branch
-  api_base_url      = "${module.backend.service_uri}/api"
-  data_mode         = var.web_data_mode
-  custom_domains    = var.web_custom_domains
-}

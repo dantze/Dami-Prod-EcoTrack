@@ -69,19 +69,14 @@ output "deployer_service_account_key" {
   sensitive   = true
 }
 
-output "vercel_project_id" {
-  description = "Vercel project id."
-  value       = module.frontend.project_id
-}
-
 output "vercel_project_name" {
-  description = "Vercel project name."
-  value       = module.frontend.project_name
+  description = "Vercel project the SPA is served from. Not managed here."
+  value       = var.vercel_project_name
 }
 
 output "frontend_url" {
   description = "Vercel's production alias for the project."
-  value       = module.frontend.url
+  value       = "https://${var.vercel_project_name}.vercel.app"
 }
 
 output "frontend_allowed_origins" {

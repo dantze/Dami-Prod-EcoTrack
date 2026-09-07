@@ -17,11 +17,12 @@ name: Deploy
 #   2. apply infra/ with Terraform (GCP + Vercel);
 #   3. build the backend image, push it to Artifact Registry, and roll a new
 #      Cloud Run revision;
-#   4. redeploy the Vercel frontend so the build picks up VITE_API_BASE_URL.
+#   4. write VITE_API_BASE_URL onto the Vercel project and rebuild the frontend.
 #
 # Step 4 is not optional garnish. Vite inlines VITE_* at BUILD time, so a
-# backend URL that changed in Terraform does not reach a single user until the
-# frontend is rebuilt.
+# backend URL that changed does not reach a single user until the frontend is
+# rebuilt. Terraform describes GCP only — the Vercel project is created by
+# hand, and this workflow is what keeps its two build-time variables true.
 #
 # THE ONE THING THAT CHANGED FOR APPLICATION CODE: the VPS served the SPA and
 # the API from one Caddy on one domain, so the browser's API call was
@@ -43,9 +44,11 @@ name: Deploy
 #   GCP_PROJECT_ID        Target GCP project id.
 #   VERCEL_API_TOKEN      https://vercel.com/account/tokens
 #   VERCEL_ORG_ID         Vercel team/user id. `vercel whoami` or .vercel/project.json
+#   VERCEL_PROJECT_ID     The Vercel project is created by hand, not by
+#                         Terraform, so its id comes from here. Settings ->
+#                         General, or .vercel/project.json after a `vercel link`.
 #
 # OPTIONAL
-#   VERCEL_TEAM_ID        Set only when the Vercel project lives under a Team.
 #   BACKEND_SECRETS_JSON  JSON object of extra secret env for the container,
 #                         e.g. {"DO_SPACES_SECRET_KEY":"..."}. Becomes one
 #                         Secret Manager secret per key.
@@ -124,9 +127,10 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           MISSING=""
-          for NAME in GCP_CREDENTIALS_JSON GCP_PROJECT_ID VERCEL_API_TOKEN VERCEL_ORG_ID; do
+          for NAME in GCP_CREDENTIALS_JSON GCP_PROJECT_ID VERCEL_API_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
             eval "VALUE=\${$NAME}"
             if [ -z "$VALUE" ]; then
               MISSING="$MISSING $NAME"
@@ -185,7 +189,7 @@ jobs:
       service_name: ${{ steps.tf_outputs.outputs.service_name }}
       job_names: ${{ steps.tf_outputs.outputs.job_names }}
       backend_url: ${{ steps.tf_outputs.outputs.backend_url }}
-      vercel_project_id: ${{ steps.tf_outputs.outputs.vercel_project_id }}
+      api_base_url: ${{ steps.tf_outputs.outputs.api_base_url }}
 
     env:
       # Terraform reads TF_VAR_<name> for every input variable. Passing them
@@ -194,10 +198,9 @@ jobs:
       TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
       TF_VAR_gcp_region: ${{ vars.GCP_REGION || 'europe-west1' }}
       TF_VAR_gcp_credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
-      TF_VAR_vercel_api_token: ${{ secrets.VERCEL_API_TOKEN }}
-      TF_VAR_vercel_team_id: ${{ secrets.VERCEL_TEAM_ID }}
+      # Terraform does not create the Vercel project; it only needs the NAME,
+      # to compute the backend's allowed CORS origins.
       TF_VAR_vercel_project_name: ${{ vars.VERCEL_PROJECT_NAME || 'ecotrack-web' }}
-      TF_VAR_vercel_git_repository: ${{ github.repository }}
       TF_VAR_backend_secrets: ${{ secrets.BACKEND_SECRETS_JSON || '{}' }}
       # Never prompt, never colour-code, and print a diff a human can read in
       # the Actions log.
@@ -268,7 +271,7 @@ jobs:
             echo "service_name=$(terraform output -raw backend_service_name)"
             echo "job_names=$(terraform output -json backend_job_names | jq -r 'join(" ")')"
             echo "backend_url=$(terraform output -raw backend_url)"
-            echo "vercel_project_id=$(terraform output -raw vercel_project_id)"
+            echo "api_base_url=$(terraform output -raw backend_api_base_url)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Summary
@@ -428,10 +431,7 @@ jobs:
 
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      # Terraform is the source of truth. The secret is the fallback for a
-      # manual run with skip_terraform, where the terraform job produced no
-      # outputs and `vercel pull` would otherwise have no project to pull.
-      VERCEL_PROJECT_ID: ${{ needs.terraform.outputs.vercel_project_id || secrets.VERCEL_PROJECT_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
     steps:
       - name: Checkout
@@ -450,8 +450,34 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      # `pull` fetches the project settings Terraform wrote — including
-      # VITE_API_BASE_URL, which is where the Cloud Run URL enters the build.
+      # Vite inlines VITE_* at BUILD time, so this is where the Cloud Run URL
+      # enters the bundle. Written on every deploy rather than once by hand:
+      # that way a backend URL that ever does change corrects itself, and a
+      # project restored from the dashboard cannot quietly build against
+      # nothing. Remove-then-add because `vercel env add` refuses to overwrite.
+      - name: Point the Vercel project at this backend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+        run: |
+          API_BASE_URL='${{ needs.terraform.outputs.api_base_url }}'
+          if [ -z "$API_BASE_URL" ]; then
+            API_BASE_URL='${{ needs.backend.outputs.backend_url }}/api'
+          fi
+          if [ "$API_BASE_URL" = "/api" ]; then
+            echo "::error title=No backend URL::Neither Terraform nor the Cloud Run deploy produced a backend URL, so the bundle would be built against nothing."
+            exit 1
+          fi
+
+          for TARGET in production preview; do
+            for PAIR in "VITE_API_BASE_URL=$API_BASE_URL" "VITE_DATA_MODE=live"; do
+              NAME="${PAIR%%=*}"
+              VALUE="${PAIR#*=}"
+              vercel env rm "$NAME" "$TARGET" --yes --token="$VERCEL_TOKEN" >/dev/null 2>&1 || true
+              printf '%s' "$VALUE" | vercel env add "$NAME" "$TARGET" --token="$VERCEL_TOKEN"
+            done
+          done
+          echo "VITE_API_BASE_URL=$API_BASE_URL"
+
       - name: Pull Vercel project settings
         run: vercel pull --yes --environment=production --token='${{ secrets.VERCEL_API_TOKEN }}'
 
