@@ -31,12 +31,11 @@ unless its status says otherwise.
 
 ---
 
-## Still open — 6 of 90
+## Still open — 5 of 90
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
 - **TODO-17** `[POSTPONED]` — All other AI ideas *(F)*
-- **TODO-79** `[ ]` — The "GCP deployment" still depends on a DigitalOcean bucket *(G)*
 - **TODO-82** `[ ]` — Two Mantine providers are mounted and neither is ever used *(G)*
 - **TODO-83** `[ ]` — `Button`'s default variant is `secondary`, and one screen relied on it by accident *(G)*
 - **TODO-87** `[ ]` — The bundle ceiling still describes headroom over a build CI no longer makes *(G)*
@@ -135,7 +134,7 @@ full text lives further down.
 | TODO-76 | `[DONE]` | A | `AdminController` answers in three shapes, none of them the app's |
 | TODO-77 | `[DONE]` | J | Two confirmation dialogs, with different accessibility |
 | TODO-78 | `[DONE]` | J | `.nvmrc` exists now but nothing tells a new contributor |
-| TODO-79 | **`[ ]`** | G | The "GCP deployment" still depends on a DigitalOcean bucket |
+| TODO-79 | `[DONE]` | G | The "GCP deployment" still depends on a DigitalOcean bucket |
 | TODO-80 | `[DONE]` | G | Paying for a warm instance to run two cron jobs |
 | TODO-81 | `[DONE]` | G | Both nightly jobs run on EVERY Cloud Run instance |
 | TODO-82 | **`[ ]`** | G | Two Mantine providers are mounted and neither is ever used |
@@ -3211,7 +3210,7 @@ entirely.
 *Found while doing TODO-32.*
 
 ---
-### TODO-79 `[ ]` The "GCP deployment" still depends on a DigitalOcean bucket
+### TODO-79 `[DONE]` The "GCP deployment" still depends on a DigitalOcean bucket
 Found while doing TODO-71. Task photos are written to and read from
 **DigitalOcean Spaces** — `PhotoService` points the AWS S3 SDK at
 `https://$DO_SPACES_REGION.digitaloceanspaces.com`, and the presigned URLs that
@@ -3232,6 +3231,38 @@ flip) that assume the bucket is where it is.
 
 Not urgent: nothing is broken and nothing is unsafe. It is a "how many bills do
 we want" question, and worth answering before more objects accumulate.
+
+**Done — moved to GCS, and it removed a credential rather than relocating one.**
+The deciding argument turned out not to be the bill. Spaces needs an access key
+pair, which had to be created by hand, pasted into `BACKEND_SECRETS_JSON`,
+written into `terraform.tfstate` in plaintext on its way to Secret Manager, and
+rotated by somebody. A GCS bucket needs none of that: the Cloud Run instance has
+an identity, so `PhotoService` uses Application Default Credentials and the
+bucket's IAM policy names the runtime service account. That deleted the last
+entry `BACKEND_SECRETS_JSON` had, which leaves exactly one runtime secret in the
+whole application — the database password, which Terraform generates and nobody
+types.
+
+`PhotoService` moved from the AWS S3 SDK to `google-cloud-storage`; its public
+surface (`uploadPhoto`, `deletePhoto`, `presignedUrl(s)`, `ALLOWED_IMAGE_TYPES`)
+is unchanged, so no caller moved. Three things are worth knowing:
+
+- **The privacy guarantee got stronger, not equivalent.** TODO-46 wrote
+  `ObjectCannedACL.PRIVATE` per object, which a code change could undo. The
+  bucket sets `uniform_bucket_level_access` (per-object ACLs are refused) and
+  `public_access_prevention = "enforced"` (a public IAM binding is refused), so
+  a public object is not reachable by editing our code at all.
+- **V4 signing has no private key**, so it goes through the IAM `signBlob` API
+  and the runtime service account needs `roles/iam.serviceAccountTokenCreator`
+  **on itself**. Missing, uploads work and every read link 403s — an asymmetry
+  worth recognising quickly.
+- **Nothing was copied.** The migration concern this item raised was the objects
+  already in Spaces, and there are none that matter: the app has never left
+  development, and TODO-45 records the owner confirming no ID photos were ever
+  uploaded. `DEPLOYMENT.md`'s two one-time Spaces operations are folded into a
+  single decommissioning step — check both prefixes, delete the bucket, revoke
+  the keys. If real photos ever had existed, this would have needed a copy step
+  and a dual-read window instead.
 
 ### TODO-80 `[DONE]` Paying for a warm instance to run two cron jobs
 `backend_min_instances` is pinned at 1, and validated, because
@@ -3494,8 +3525,8 @@ A record rather than a task, kept because the list it replaces was deleted with
 - **Nothing for `mobile/`.** It ships through EAS (`deploy-mobile.yml`), and its
   two `EXPO_PUBLIC_*` variables are set by hand from Terraform outputs.
 - **Nothing for Vercel.** It did, until TODO-90 removed it.
-- **No object storage.** Task photos still go to DigitalOcean Spaces — that is
-  TODO-79, and it is the only entry here with its own item.
+- **Object storage is here now.** Task photos moved to a GCS bucket the
+  `storage` module creates (TODO-79); this entry used to say the opposite.
 
 **Deciding it needs** nothing until the deployment is real: every one of these
 is a "once somebody depends on it" question, and nobody does yet — there is no

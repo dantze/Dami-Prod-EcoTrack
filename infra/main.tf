@@ -22,10 +22,12 @@ resource "google_project_service" "required" {
     "cloudscheduler.googleapis.com",
     "compute.googleapis.com",
     "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "servicenetworking.googleapis.com",
     "sqladmin.googleapis.com",
+    "storage.googleapis.com",
   ]) : toset([])
 
   project            = var.gcp_project_id
@@ -95,6 +97,19 @@ module "iam" {
   depends_on = [google_project_service.required]
 }
 
+module "storage" {
+  source = "./modules/storage"
+
+  prefix                  = local.prefix
+  project_id              = var.gcp_project_id
+  location                = var.gcp_region
+  labels                  = local.labels
+  runtime_service_account = module.iam.runtime_email
+  force_destroy           = var.photo_bucket_force_destroy
+
+  depends_on = [module.iam, google_project_service.required]
+}
+
 module "backend" {
   source = "./modules/backend"
 
@@ -124,11 +139,14 @@ module "backend" {
   scheduler_time_zone       = var.scheduler_time_zone
 
   plain_env = merge(
-    { ECOTRACK_CORS_ALLOWED_ORIGINS = local.cors },
+    {
+      ECOTRACK_CORS_ALLOWED_ORIGINS = local.cors
+      GCS_BUCKET                    = module.storage.bucket_name
+    },
     var.backend_env,
   )
 
   secret_env = var.backend_secrets
 
-  depends_on = [module.database, module.iam, google_project_service.required]
+  depends_on = [module.database, module.iam, module.storage, google_project_service.required]
 }

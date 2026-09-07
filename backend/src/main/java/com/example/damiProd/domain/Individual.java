@@ -19,7 +19,7 @@ public class Individual extends Client {
     // documents (TODO-14) - the client apps read the card on the operator's own
     // device, take the name and CNP from its machine-readable zone and drop the
     // image (TODO-13) - and the field outlived that only as the record of the
-    // keys of objects already in Spaces, so they could be found and deleted.
+    // keys of objects already in storage, so they could be found and deleted.
     // That drain is confirmed done and the field is gone with it (TODO-45).
     //
     // The database column is NOT dropped by this: ddl-auto=update never drops

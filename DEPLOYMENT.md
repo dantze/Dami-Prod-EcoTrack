@@ -1,7 +1,7 @@
 # Deployment
 
-Backend on **Cloud Run**, database on **Cloud SQL** (PostgreSQL), frontend on
-**Vercel**. The GCP half is described by Terraform in `infra/`; the Vercel
+Backend on **Cloud Run**, database on **Cloud SQL** (PostgreSQL), task photos in
+**Cloud Storage**, frontend on **Vercel**. The GCP half is described by Terraform in `infra/`; the Vercel
 project is created by hand and `deploy.yml` writes its two build-time variables
 on every deploy.
 
@@ -162,14 +162,25 @@ General, or `.vercel/project.json` after `vercel link`. For a Team account,
 Optional:
 
 ```
-BACKEND_SECRETS_JSON     # {"DO_SPACES_ACCESS_KEY":"…","DO_SPACES_SECRET_KEY":"…"}
+BACKEND_SECRETS_JSON     # {"SOME_KEY":"…"} — nothing needs it today
 ```
 
-`BACKEND_SECRETS_JSON` is how credentials reach the container: each key becomes
-its own Secret Manager secret, readable only by the Cloud Run runtime service
-account. **Task photos still live in DigitalOcean Spaces**, so the `DO_SPACES_*`
-values are still required for photo upload to work — moving them to GCS is not
-done (TODO-79).
+`BACKEND_SECRETS_JSON` is how a credential would reach the container: each key
+becomes its own Secret Manager secret, readable only by the Cloud Run runtime
+service account. **Nothing needs it.** Task photos moved to a GCS bucket the
+runtime service account can write without a key (TODO-79), and the database
+password is Terraform's. Leave it unset.
+
+**The complete secret list, after that move:**
+
+| Secret | Where it comes from | Where it lives | How to read it back |
+|---|---|---|---|
+| DB password | Terraform generates it | Secret Manager `ecotrack-dev-db-password`, and plaintext in `terraform.tfstate` | `gcloud secrets versions access latest --secret=ecotrack-dev-db-password` |
+| `ECOTRACK_SETUP_CODE` | optional; unset means the backend generates one and logs it | log only, unless you set it | `gcloud run services logs read` |
+| `GCP_CREDENTIALS_JSON`, `VERCEL_API_TOKEN`, `EXPO_TOKEN` | you create them | GitHub secrets only — never stored in GCP | the issuing console |
+
+That is the whole list. Task photo storage needs no credential at all: the
+container has an identity, and the bucket's IAM policy names it.
 
 **Variables** (Settings → Variables, not secrets; defaults shown):
 
@@ -263,7 +274,7 @@ Roughly, `europe-west1`, defaults as written:
 | Cloud SQL `db-f1-micro`, 10 GB, ZONAL | ~$10/mo, and it runs 24/7 whether or not anyone uses the app |
 | Cloud Run service + the two nightly jobs | ~$5/mo — request-billed, scaled to zero out of hours |
 | Artifact Registry | ~$0.10/GB/mo, capped by the cleanup policy |
-| VPC, Secret Manager, Cloud Scheduler | cents |
+| Cloud Storage, VPC, Secret Manager, Cloud Scheduler | cents at this volume |
 | Vercel Hobby | $0 |
 
 **~$15/month** before any traffic. Cloud SQL is the whole bill and is the one
@@ -463,8 +474,13 @@ below possible now that the column is gone: an object can still be found by
 prefix even though nothing in the database points at it. Task photos live under
 a different prefix and must be left alone.
 
+These commands talk to the **old DigitalOcean Spaces bucket**, which the app no
+longer uses at all (TODO-79) — running them is the last thing that bucket is
+for. You need the Spaces keys from the DigitalOcean panel; the application no
+longer holds them.
+
 ```bash
-# DigitalOcean Spaces is S3-compatible; use the region endpoint from .env.
+# DigitalOcean Spaces is S3-compatible; use the region endpoint.
 # Needs the Spaces keys and nothing else — no running server.
 aws s3 ls "s3://$DO_SPACES_BUCKET/persoane fizice/" \
     --endpoint-url "https://$DO_SPACES_REGION.digitaloceanspaces.com" \
@@ -498,33 +514,29 @@ The local H2 file is `backend/data/damiprod`; the local Postgres is
 has not been run for that environment — the column is the last thing that would
 have told you which objects existed.
 
-## Task photos are private (one-time ACL fix for old objects)
+## Task photos, and decommissioning Spaces
 
-New uploads are written `PRIVATE` and served as short-lived presigned URLs
-(TODO-46). **Objects uploaded by earlier builds keep the public-read ACL they
-were created with** — changing the code does not re-ACL anything already in the
-bucket, exactly like the ID photos in the section above.
+Photos go to the GCS bucket Terraform creates, `ecotrack-dev-photos`. There is
+**no key**: the Cloud Run runtime service account holds `objectAdmin` on that
+bucket and the SDK authenticates as it. Two bucket settings are the privacy
+guarantee, and both are enforced by the platform rather than by our code —
+`uniform_bucket_level_access` refuses per-object ACLs and
+`public_access_prevention = "enforced"` refuses a public IAM binding. So the
+one-time ACL fix that used to live here has nothing to fix: the bucket is new
+and cannot hold a public object.
 
-They live under `poze cabine/`. Flip them once, per environment:
+Reads are short-lived V4-signed URLs (TODO-46). Signing has no private key to
+work with, so it calls the IAM `signBlob` API — which is why the runtime service
+account holds `roles/iam.serviceAccountTokenCreator` **on itself**. If photo
+links start returning 403 while uploads still work, that binding is what to
+check first.
 
-```bash
-# what is there
-aws s3 ls "s3://$DO_SPACES_BUCKET/poze cabine/" \
-    --endpoint-url "https://$DO_SPACES_REGION.digitaloceanspaces.com" --recursive
-
-# make each one private (no bulk flag exists; one call per object)
-aws s3 ls "s3://$DO_SPACES_BUCKET/poze cabine/" \
-    --endpoint-url "https://$DO_SPACES_REGION.digitaloceanspaces.com" --recursive \
-  | awk '{ $1=""; $2=""; $3=""; sub(/^ +/, ""); print }' \
-  | while IFS= read -r key; do
-      aws s3api put-object-acl --bucket "$DO_SPACES_BUCKET" --key "$key" --acl private \
-          --endpoint-url "https://$DO_SPACES_REGION.digitaloceanspaces.com"
-    done
-```
-
-Do this **after** the release that adds presigning, not before: until it is
-deployed, the app still hands clients raw URLs, and making the objects private
-first would show drivers broken images.
+**Then delete the Spaces bucket.** Nothing reads it any more. Run the
+`persoane fizice/` check in the section above first — it is the last chance to
+find a stray ID photo — then check `poze cabine/` the same way, and once both
+are dealt with, delete the bucket in the DigitalOcean panel and **revoke the
+Spaces access keys**. They are no longer in GitHub, in Secret Manager, or in the
+container, so nothing breaks when they die.
 
 ## Gotchas
 

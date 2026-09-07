@@ -49,9 +49,10 @@ name: Deploy
 #                         General, or .vercel/project.json after a `vercel link`.
 #
 # OPTIONAL
-#   BACKEND_SECRETS_JSON  JSON object of extra secret env for the container,
-#                         e.g. {"DO_SPACES_SECRET_KEY":"..."}. Becomes one
-#                         Secret Manager secret per key.
+#   BACKEND_SECRETS_JSON  JSON object of extra secret env for the container.
+#                         Becomes one Secret Manager secret per key. Nothing
+#                         needs it today — task photo storage is keyless
+#                         (TODO-79) and the DB password is Terraform's.
 #
 # REPOSITORY VARIABLES (Settings -> Variables, not secrets)
 #   GCP_REGION            Defaults to europe-west1 below.

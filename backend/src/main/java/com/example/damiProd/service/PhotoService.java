@@ -1,26 +1,21 @@
 package com.example.damiProd.service;
 
+import com.google.cloud.storage.BlobId;
+import com.google.cloud.storage.BlobInfo;
+import com.google.cloud.storage.Storage;
+import com.google.cloud.storage.StorageOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
-import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.*;
-import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-
 import java.io.IOException;
-import java.net.URI;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class PhotoService {
@@ -45,20 +40,10 @@ public class PhotoService {
             "image/heic",
             "image/heif");
 
-    @Value("${spaces.access-key}")
-    private String accessKey;
-
-    @Value("${spaces.secret-key}")
-    private String secretKey;
-
-    @Value("${spaces.bucket}")
+    @Value("${gcs.bucket}")
     private String bucketName;
 
-    @Value("${spaces.region}")
-    private String region;
-
-    private S3Client s3Client;
-    private S3Presigner presigner;
+    private Storage storage;
 
     /**
      * How long a presigned photo URL stays valid.
@@ -70,22 +55,27 @@ public class PhotoService {
      */
     private static final Duration PRESIGNED_URL_TTL = Duration.ofHours(1);
 
+    /** Prefix of the canonical, unsigned URL stored in {@code task_photos.image_url}. */
+    private static final String PUBLIC_URL_BASE = "https://storage.googleapis.com/";
+
     /**
-     * Initialize S3 client lazily (after Spring injects properties).
-     * DigitalOcean Spaces uses an S3-compatible API, so we point the
-     * AWS SDK at the Spaces endpoint instead of AWS.
+     * Built lazily, and that is load-bearing rather than tidy.
+     *
+     * <p>This is a {@code @Service}, so it is constructed in every
+     * {@code @SpringBootTest} context and on every developer's machine.
+     * {@link StorageOptions#getDefaultInstance()} resolves Application Default
+     * Credentials, which do not exist in either place - doing it in the
+     * constructor would fail the whole context for a bean most tests never call.
      */
-    private S3Client getS3Client() {
-        if (s3Client == null) {
-            String endpoint = String.format("https://%s.digitaloceanspaces.com", region);
-            s3Client = S3Client.builder()
-                    .endpointOverride(URI.create(endpoint))
-                    .region(Region.of(region))
-                    .credentialsProvider(StaticCredentialsProvider.create(
-                            AwsBasicCredentials.create(accessKey, secretKey)))
-                    .build();
+    private Storage getStorage() {
+        if (storage == null) {
+            // No key, anywhere. On Cloud Run ADC resolves to the runtime service
+            // account, which holds objectAdmin on this one bucket and nothing
+            // else - which is the entire reason the Spaces access key pair could
+            // be deleted (TODO-79).
+            storage = StorageOptions.getDefaultInstance().getService();
         }
-        return s3Client;
+        return storage;
     }
 
     /**
@@ -94,7 +84,7 @@ public class PhotoService {
      * @param file           The MultipartFile to upload.
      * @param folder         The folder path.
      * @param customFileName The desired filename (without extension). Can be null.
-     * @return The public URL of the uploaded file.
+     * @return The canonical (unsigned) URL of the uploaded object.
      * @throws IOException If an I/O error occurs.
      */
     public String uploadPhoto(MultipartFile file, String folder, String customFileName) throws IOException {
@@ -130,48 +120,31 @@ public class PhotoService {
             objectName = folder + fileName;
         }
 
-        // Upload to DigitalOcean Spaces
-        PutObjectRequest putRequest = PutObjectRequest.builder()
-                .bucket(bucketName)
-                .key(objectName)
-                .contentType(file.getContentType())
-                // PRIVATE, not PUBLIC_READ (TODO-46). A public-read object is on
-                // a working unauthenticated URL forever, and the key is not the
-                // secret people assume: it is
-                // "poze cabine/{taskId}_{clientName}/{n}" - a small integer, a
-                // customer's name, and a counter starting at 1. Anyone who ever
-                // sees one URL can walk that client's other photos by changing
-                // the last segment. Reads go through presignedUrl() below.
-                .acl(ObjectCannedACL.PRIVATE)
+        // No ACL is set, and none can be: the bucket has uniform bucket-level
+        // access, so per-object ACLs are refused outright and access is decided
+        // by the bucket's IAM policy alone. That is a stronger form of what
+        // TODO-46 asked for than the PRIVATE canned ACL it replaces - an object
+        // cannot be made public by accident, because the API to do it per-object
+        // is switched off. It matters here: the key is
+        // "poze cabine/{taskId}_{clientName}/{n}" - a small integer, a customer's
+        // name and a counter starting at 1 - so one working URL would let anyone
+        // walk that client's other photos. Reads go through presignedUrl() below.
+        BlobInfo blobInfo = BlobInfo.newBuilder(BlobId.of(bucketName, objectName))
+                .setContentType(file.getContentType())
                 .build();
 
-        getS3Client().putObject(putRequest, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+        try (var in = file.getInputStream()) {
+            getStorage().createFrom(blobInfo, in);
+        }
 
         // The canonical URL is still what gets stored: it is a stable identity
         // for the object, and extractObjectName() turns it back into a key. It
-        // is no longer *usable* on its own - fetching now needs a presigned URL.
-        return String.format("https://%s.%s.digitaloceanspaces.com/%s", bucketName, region, objectName);
+        // is not *usable* on its own - fetching needs a presigned URL.
+        return PUBLIC_URL_BASE + bucketName + "/" + objectName;
     }
 
     /**
-     * The presigner, built lazily for the same reason as the client: the
-     * @Value fields are not populated until after construction.
-     */
-    private S3Presigner getPresigner() {
-        if (presigner == null) {
-            String endpoint = String.format("https://%s.digitaloceanspaces.com", region);
-            presigner = S3Presigner.builder()
-                    .endpointOverride(URI.create(endpoint))
-                    .region(Region.of(region))
-                    .credentialsProvider(StaticCredentialsProvider.create(
-                            AwsBasicCredentials.create(accessKey, secretKey)))
-                    .build();
-        }
-        return presigner;
-    }
-
-    /**
-     * Deletes a photo from DigitalOcean Spaces given its full URL or object name.
+     * Deletes a photo from the bucket given its full URL or object name.
      *
      * <p><b>A failure is reported, not thrown</b> (TODO-25). Every caller but one
      * is a cascade whose actual job is removing a row — deleting a client, or a
@@ -193,14 +166,14 @@ public class PhotoService {
     public boolean deletePhoto(String photoUrlOrName) {
         String objectName = extractObjectName(photoUrlOrName);
 
-        DeleteObjectRequest deleteRequest = DeleteObjectRequest.builder()
-                .bucket(bucketName)
-                .key(objectName)
-                .build();
-
         try {
-            getS3Client().deleteObject(deleteRequest);
-            return true;
+            if (getStorage().delete(BlobId.of(bucketName, objectName))) {
+                return true;
+            }
+            // Already gone. Not an error - a retried cascade reaches here - but
+            // it is the same outcome for the caller as a refusal would be.
+            log.info("Object '{}' was not present in bucket '{}'", objectName, bucketName);
+            return false;
         } catch (Exception e) {
             log.error("Failed to delete object '{}' from bucket '{}'; it stays in storage "
                     + "and this line is the only record of it", objectName, bucketName, e);
@@ -218,12 +191,12 @@ public class PhotoService {
     /**
      * A time-limited URL that can actually fetch a private object (TODO-46).
      *
-     * <p>Objects are written PRIVATE, so the stored URL no longer resolves for
-     * anyone. This signs a short-lived GET for it, and the signature is what
-     * carries the authorisation - which means <b>the caller must have already
-     * decided the requester is allowed to see it</b>. Every caller today is
-     * behind {@code TaskAccessPolicy.requireCanAccessTask}; a new one without an
-     * equivalent check would hand out access this method cannot withhold.
+     * <p>Objects are unreadable without a signature, so the stored URL does not
+     * resolve for anyone. This signs a short-lived GET for it, and the signature
+     * is what carries the authorisation - which means <b>the caller must have
+     * already decided the requester is allowed to see it</b>. Every caller today
+     * is behind {@code TaskAccessPolicy.requireCanAccessTask}; a new one without
+     * an equivalent check would hand out access this method cannot withhold.
      *
      * <p>The window is deliberately short but not tiny. Long enough that a
      * driver can open a task, scroll its photos and come back without the images
@@ -233,24 +206,27 @@ public class PhotoService {
      * {@code useTaskPhotos} sets no staleTime, mobile's CloudPhotoViewer holds
      * them in component state - so nothing needs to survive longer.
      *
+     * <p>There is no signing key on disk. V4 signing goes through the IAM
+     * {@code signBlob} API as the runtime service account, which is why that
+     * account holds {@code roles/iam.serviceAccountTokenCreator} on ITSELF -
+     * remove that binding and every photo link starts failing while uploads keep
+     * working.
+     *
      * @return a signed URL, or the input unchanged if signing fails - the caller
-     *         gets a link that 403s rather than an exception that blanks the
+     *         gets a link that fails rather than an exception that blanks the
      *         whole gallery.
      */
     public String presignedUrl(String photoUrlOrName) {
         String objectName = extractObjectName(photoUrlOrName);
         try {
-            GetObjectRequest getRequest = GetObjectRequest.builder()
-                    .bucket(bucketName)
-                    .key(objectName)
-                    .build();
-            GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                    .signatureDuration(PRESIGNED_URL_TTL)
-                    .getObjectRequest(getRequest)
-                    .build();
-            return getPresigner().presignGetObject(presignRequest).url().toString();
+            BlobInfo blobInfo = BlobInfo.newBuilder(BlobId.of(bucketName, objectName)).build();
+            return getStorage().signUrl(
+                    blobInfo,
+                    PRESIGNED_URL_TTL.toMinutes(),
+                    TimeUnit.MINUTES,
+                    Storage.SignUrlOption.withV4Signature()).toString();
         } catch (Exception e) {
-            log.error("Failed to presign object '{}' in bucket '{}'; returning the unsigned URL, "
+            log.error("Failed to sign object '{}' in bucket '{}'; returning the unsigned URL, "
                     + "which will not resolve", objectName, bucketName, e);
             return photoUrlOrName;
         }
@@ -262,12 +238,17 @@ public class PhotoService {
     }
 
     /**
-     * Extracts the object name from a full Spaces URL or returns the input as-is.
+     * Extracts the object name from a canonical URL, a gs:// URI, or returns the
+     * input as-is when it is already a key.
      */
     private String extractObjectName(String input) {
-        String prefix = String.format("https://%s.%s.digitaloceanspaces.com/", bucketName, region);
-        if (input.startsWith(prefix)) {
-            return input.substring(prefix.length());
+        String httpsPrefix = PUBLIC_URL_BASE + bucketName + "/";
+        if (input.startsWith(httpsPrefix)) {
+            return input.substring(httpsPrefix.length());
+        }
+        String gsPrefix = "gs://" + bucketName + "/";
+        if (input.startsWith(gsPrefix)) {
+            return input.substring(gsPrefix.length());
         }
         return input;
     }

@@ -53,6 +53,11 @@ output "database_password_secret_id" {
   value       = module.database.password_secret_id
 }
 
+output "photo_bucket_name" {
+  description = "GCS bucket holding task photos. Reaches the backend as GCS_BUCKET."
+  value       = module.storage.bucket_name
+}
+
 output "backend_runtime_service_account" {
   description = "Service account the Cloud Run service and jobs run as."
   value       = module.iam.runtime_email

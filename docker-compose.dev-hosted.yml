@@ -41,10 +41,7 @@ services:
       DB_NAME: ${DB_NAME:-damiprod_dev}
       DB_USER: ${DB_USER:-damiprod_dev_user}
       DB_PASS: ${DB_PASS:-dev_secure_password}
-      DO_SPACES_ACCESS_KEY: ${DO_SPACES_ACCESS_KEY:-}
-      DO_SPACES_SECRET_KEY: ${DO_SPACES_SECRET_KEY:-}
-      DO_SPACES_BUCKET: ${DO_SPACES_BUCKET:-damiprod-dev-storage}
-      DO_SPACES_REGION: ${DO_SPACES_REGION:-fra1}
+      GCS_BUCKET: ${GCS_BUCKET:-}
       ECOTRACK_SECURITY_ENFORCE: ${ECOTRACK_SECURITY_ENFORCE:-false}
       ECOTRACK_CORS_ALLOWED_ORIGINS: ${ECOTRACK_CORS_ALLOWED_ORIGINS:-*}
       # Optional first-run admin code (TODO-36). Unset => the backend

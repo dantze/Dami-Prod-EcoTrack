@@ -27,9 +27,10 @@ project workflow watches. `audit.yml` is scheduled, not a PR gate. See the
 `verify` skill for which checks a given diff actually needs.
 
 **`infra/` describes the GCP half of the deployment**, in Terraform: Cloud Run
-(one service and two jobs), Cloud SQL, Artifact Registry, Secret Manager, Cloud
-Scheduler, a VPC and three least-privilege service accounts. Five modules under
-`infra/modules/` — `network`, `database`, `registry`, `iam`, `backend` — with
+(one service and two jobs), Cloud SQL, Cloud Storage, Artifact Registry, Secret
+Manager, Cloud Scheduler, a VPC and three least-privilege service accounts. Six
+modules under `infra/modules/` — `network`, `database`, `registry`, `iam`,
+`storage`, `backend` — with
 `infra/main.tf` holding only locals, the API enablement and the module wiring,
 and the root `variables.tf` / `outputs.tf` holding every name `deploy.yml` binds
 to. **The `.tf` files carry no comments**; what used to be written in them is in
@@ -692,9 +693,23 @@ is the safety net that made deleting the column acceptable. The database COLUMN
 still exists — `ddl-auto=update` never drops — and the manual DDL is in
 `DEPLOYMENT.md` too.
 
-**Task photos are private objects, served as presigned URLs** (TODO-46).
-`PhotoService.uploadPhoto` writes `ObjectCannedACL.PRIVATE`, and
-`GET /api/tasks/{id}/photos` signs a short-lived link per request rather than
+**Task photos live in a GCS bucket, with no credential anywhere** (TODO-79).
+`PhotoService` uses `google-cloud-storage` and Application Default Credentials,
+so on Cloud Run it authenticates as the runtime service account, which holds
+`objectAdmin` on that one bucket. The DigitalOcean Spaces key pair — the last
+thing keeping a non-GCP dependency alive, and the only reason
+`BACKEND_SECRETS_JSON` had to exist — is gone. **The bucket's own settings are
+the privacy guarantee**: `uniform_bucket_level_access` refuses per-object ACLs
+outright and `public_access_prevention = "enforced"` refuses a public IAM
+binding, so an object cannot be made world-readable by a code change.
+
+One binding is easy to miss and breaks reads only: V4 signing has no private key
+to sign with, so it goes through the IAM `signBlob` API and the runtime service
+account holds **`roles/iam.serviceAccountTokenCreator` on itself**. Remove it and
+uploads keep working while every photo link starts failing.
+
+**Photos are served as short-lived signed URLs** (TODO-46).
+`GET /api/tasks/{id}/photos` signs a link per request rather than
 returning the stored URL. Two consequences that are easy to get wrong:
 
 - **The signature carries the access, so the guard on the endpoint is the whole
@@ -709,8 +724,8 @@ returning the stored URL. Two consequences that are easy to get wrong:
 This was not a theoretical exposure: the object key is
 `poze cabine/{taskId}_{clientName}/{n}`, so a public URL named a customer and its
 last segment counted from 1 — one leaked link walked that client's other photos.
-Objects uploaded before this change keep their old public ACL; `DEPLOYMENT.md`
-has the one-time fix.
+The GCS bucket is new and has never held a public object; what may still hold
+one is the old Spaces bucket, which `DEPLOYMENT.md` decommissions.
 
 ## Conventions
 

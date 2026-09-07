@@ -134,6 +134,12 @@ variable "vpc_private_services_cidr" {
   default     = "10.9.0.0"
 }
 
+variable "photo_bucket_force_destroy" {
+  description = "Allow destroying the photo bucket while it still holds objects."
+  type        = bool
+  default     = false
+}
+
 variable "backend_service_name" {
   description = "Cloud Run service name for the Spring Boot API."
   type        = string

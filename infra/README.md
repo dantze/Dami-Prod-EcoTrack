@@ -11,5 +11,6 @@ flowchart LR
   AR --> J
   SM[Secret Manager] --> S
   SM --> J
+  S -- signed URLs --> GCS[(Cloud Storage · task photos)]
   V -. VITE_API_BASE_URL .-> S
 ```

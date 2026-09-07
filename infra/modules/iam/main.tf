@@ -23,6 +23,12 @@ resource "google_project_iam_member" "runtime_telemetry" {
   member  = "serviceAccount:${google_service_account.runtime.email}"
 }
 
+resource "google_service_account_iam_member" "runtime_signs_as_itself" {
+  service_account_id = google_service_account.runtime.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.runtime.email}"
+}
+
 resource "google_service_account" "deployer" {
   account_id   = "${var.prefix}-deployer"
   display_name = "${var.project_name} CI deployer (${var.environment})"
