@@ -34,7 +34,6 @@ JAVA_ROOT = ROOT / "backend/src/main/java"
 COMPANION_FILES = [
     ".env.example",
     "docker-compose.yml",
-    "docker-compose.dev-hosted.yml",
     ".github/workflows/deploy.yml",
     ".github/workflows/deploy-mobile.yml",
     # Where an ecotrack.* key reaches PRODUCTION since TODO-71: main.tf sets the

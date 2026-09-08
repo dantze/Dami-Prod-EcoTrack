@@ -8,8 +8,8 @@ name: Deploy
 # DigitalOcean droplet. That droplet no longer exists and the workflow had been
 # gated off behind a `DEPLOY_ENABLED` variable since TODO-32; `git log
 # .github/workflows/deploy.yml` has it if you need to read it. `docker-compose.yml`
-# and the `Caddyfile` survive as the LOCAL full-stack environment and are no
-# longer deployed anywhere — see DEPLOYMENT.md.
+# survives as a LOCAL Postgres + backend environment and is deployed nowhere —
+# see DEPLOYMENT.md.
 #
 # Four steps, in order:
 #
@@ -17,17 +17,18 @@ name: Deploy
 #   2. apply infra/ with Terraform (GCP + Vercel);
 #   3. build the backend image, push it to Artifact Registry, and roll a new
 #      Cloud Run revision;
-#   4. redeploy the Vercel frontend so the build picks up VITE_API_BASE_URL.
+#   4. write VITE_API_BASE_URL onto the Vercel project and rebuild the frontend.
 #
 # Step 4 is not optional garnish. Vite inlines VITE_* at BUILD time, so a
-# backend URL that changed in Terraform does not reach a single user until the
-# frontend is rebuilt.
+# backend URL that changed does not reach a single user until the frontend is
+# rebuilt. Terraform describes GCP only — the Vercel project is created by
+# hand, and this workflow is what keeps its two build-time variables true.
 #
 # THE ONE THING THAT CHANGED FOR APPLICATION CODE: the VPS served the SPA and
 # the API from one Caddy on one domain, so the browser's API call was
 # same-origin and CORS never applied. Cloud Run and Vercel are two origins, so
-# it does — `ECOTRACK_CORS_ALLOWED_ORIGINS` is computed and set in
-# `infra/main.tf`, and a wrong value there fails in the browser while both
+# it does — `ECOTRACK_CORS_ALLOWED_ORIGINS` is computed in `infra/main.tf` and
+# set on the service, and a wrong value there fails in the browser while both
 # services report themselves perfectly healthy.
 #
 # -----------------------------------------------------------------------------
@@ -36,19 +37,22 @@ name: Deploy
 #   GCP_CREDENTIALS_JSON  Full JSON of a GCP service-account key. The identity
 #                         that runs `terraform apply` needs admin rights over
 #                         SQL, IAM, networking and Secret Manager — see
-#                         infra/README.md, which explains why that is a bigger
+#                         DEPLOYMENT.md, which explains why that is a bigger
 #                         grant than the deployer service account Terraform
 #                         creates, and how to avoid the key entirely with
 #                         Workload Identity Federation.
 #   GCP_PROJECT_ID        Target GCP project id.
 #   VERCEL_API_TOKEN      https://vercel.com/account/tokens
 #   VERCEL_ORG_ID         Vercel team/user id. `vercel whoami` or .vercel/project.json
+#   VERCEL_PROJECT_ID     The Vercel project is created by hand, not by
+#                         Terraform, so its id comes from here. Settings ->
+#                         General, or .vercel/project.json after a `vercel link`.
 #
 # OPTIONAL
-#   VERCEL_TEAM_ID        Set only when the Vercel project lives under a Team.
-#   BACKEND_SECRETS_JSON  JSON object of extra secret env for the container,
-#                         e.g. {"DO_SPACES_SECRET_KEY":"..."}. Becomes one
-#                         Secret Manager secret per key.
+#   BACKEND_SECRETS_JSON  JSON object of extra secret env for the container.
+#                         Becomes one Secret Manager secret per key. Nothing
+#                         needs it today — task photo storage is keyless
+#                         (TODO-79) and the DB password is Terraform's.
 #
 # REPOSITORY VARIABLES (Settings -> Variables, not secrets)
 #   GCP_REGION            Defaults to europe-west1 below.
@@ -124,9 +128,10 @@ jobs:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           VERCEL_API_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           MISSING=""
-          for NAME in GCP_CREDENTIALS_JSON GCP_PROJECT_ID VERCEL_API_TOKEN VERCEL_ORG_ID; do
+          for NAME in GCP_CREDENTIALS_JSON GCP_PROJECT_ID VERCEL_API_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
             eval "VALUE=\${$NAME}"
             if [ -z "$VALUE" ]; then
               MISSING="$MISSING $NAME"
@@ -135,7 +140,7 @@ jobs:
 
           if [ -n "$MISSING" ]; then
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Cloud deploy not configured::Skipping the GCP and Vercel jobs. Missing repository secrets:$MISSING. This is expected until infra/ has been applied once — see infra/README.md."
+            echo "::notice title=Cloud deploy not configured::Skipping the GCP and Vercel jobs. Missing repository secrets:$MISSING. This is expected until infra/ has been applied once — see DEPLOYMENT.md."
             {
               echo "### Cloud deploy skipped"
               echo ""
@@ -183,8 +188,9 @@ jobs:
       registry_host: ${{ steps.tf_outputs.outputs.registry_host }}
       image_repository: ${{ steps.tf_outputs.outputs.image_repository }}
       service_name: ${{ steps.tf_outputs.outputs.service_name }}
+      job_names: ${{ steps.tf_outputs.outputs.job_names }}
       backend_url: ${{ steps.tf_outputs.outputs.backend_url }}
-      vercel_project_id: ${{ steps.tf_outputs.outputs.vercel_project_id }}
+      api_base_url: ${{ steps.tf_outputs.outputs.api_base_url }}
 
     env:
       # Terraform reads TF_VAR_<name> for every input variable. Passing them
@@ -193,10 +199,9 @@ jobs:
       TF_VAR_gcp_project_id: ${{ secrets.GCP_PROJECT_ID }}
       TF_VAR_gcp_region: ${{ vars.GCP_REGION || 'europe-west1' }}
       TF_VAR_gcp_credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
-      TF_VAR_vercel_api_token: ${{ secrets.VERCEL_API_TOKEN }}
-      TF_VAR_vercel_team_id: ${{ secrets.VERCEL_TEAM_ID }}
+      # Terraform does not create the Vercel project; it only needs the NAME,
+      # to compute the backend's allowed CORS origins.
       TF_VAR_vercel_project_name: ${{ vars.VERCEL_PROJECT_NAME || 'ecotrack-web' }}
-      TF_VAR_vercel_git_repository: ${{ github.repository }}
       TF_VAR_backend_secrets: ${{ secrets.BACKEND_SECRETS_JSON || '{}' }}
       # Never prompt, never colour-code, and print a diff a human can read in
       # the Actions log.
@@ -213,7 +218,7 @@ jobs:
           credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
           # PREFERRED ALTERNATIVE — Workload Identity Federation, no key at all.
           # Delete credentials_json above and uncomment these two, after running
-          # the setup in infra/README.md:
+          # the setup in DEPLOYMENT.md:
           #
           # workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           # service_account: ${{ secrets.GCP_DEPLOYER_SA }}
@@ -229,7 +234,7 @@ jobs:
       # empty checkout. That means every run would believe nothing exists and
       # try to create it all again, which fails on the second run with "already
       # exists" on a dozen resources. Move state to GCS before trusting the
-      # apply below. providers.tf has the four-line block.
+      # apply below; DEPLOYMENT.md has the bucket commands and the block.
       - name: Check Terraform state is remote
         run: |
           if grep -rqE '^\s*backend\s+"' *.tf; then
@@ -265,8 +270,9 @@ jobs:
             echo "registry_host=$(terraform output -raw artifact_registry_host)"
             echo "image_repository=$(terraform output -raw backend_image_repository)"
             echo "service_name=$(terraform output -raw backend_service_name)"
+            echo "job_names=$(terraform output -json backend_job_names | jq -r 'join(" ")')"
             echo "backend_url=$(terraform output -raw backend_url)"
-            echo "vercel_project_id=$(terraform output -raw vercel_project_id)"
+            echo "api_base_url=$(terraform output -raw backend_api_base_url)"
           } >> "$GITHUB_OUTPUT"
 
       - name: Summary
@@ -326,8 +332,8 @@ jobs:
           REPO='${{ needs.terraform.outputs.image_repository }}'
           SERVICE='${{ needs.terraform.outputs.service_name }}'
           if [ -z "$REPO" ]; then
-            REPO="${GCP_REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ecotrack-prod-backend/backend"
-            SERVICE="ecotrack-prod-backend"
+            REPO="${GCP_REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ecotrack-dev-backend/backend"
+            SERVICE="ecotrack-dev-backend"
             echo "::warning title=Using fallback image path::Terraform produced no outputs, falling back to the conventional name. Verify it matches infra/."
           fi
           echo "repo=$REPO"       >> "$GITHUB_OUTPUT"
@@ -360,8 +366,8 @@ jobs:
           provenance: false
 
       # Rolls a new revision at 100% traffic. Terraform deliberately ignores
-      # changes to the service's `image` (see the lifecycle block in main.tf),
-      # so this deploy is not reverted by the next apply.
+      # changes to the service's `image`, so this deploy is not reverted by the
+      # next apply. The nightly jobs need the same treatment, below.
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
@@ -369,6 +375,21 @@ jobs:
           service: ${{ steps.coords.outputs.service }}
           region: ${{ env.GCP_REGION }}
           image: ${{ steps.coords.outputs.repo }}:${{ steps.coords.outputs.tag }}
+
+      # The nightly jobs run the same image as the service, and Terraform
+      # ignores changes to all three, so this is what rolls them forward.
+      - name: Roll the nightly jobs onto the new image
+        run: |
+          JOBS='${{ needs.terraform.outputs.job_names }}'
+          if [ -z "$JOBS" ]; then
+            JOBS="ecotrack-dev-generate-tasks ecotrack-dev-prune-sessions"
+            echo "::warning title=Using fallback job names::Terraform produced no outputs, falling back to the conventional names. Verify they match infra/."
+          fi
+          for JOB in $JOBS; do
+            gcloud run jobs update "$JOB" \
+              --image '${{ steps.coords.outputs.repo }}:${{ steps.coords.outputs.tag }}' \
+              --region "${GCP_REGION}" --quiet
+          done
 
       # The deploy above already waits for the revision to become ready, which
       # means the startup probe on /actuator/health passed. This asserts the
@@ -411,10 +432,7 @@ jobs:
 
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      # Terraform is the source of truth. The secret is the fallback for a
-      # manual run with skip_terraform, where the terraform job produced no
-      # outputs and `vercel pull` would otherwise have no project to pull.
-      VERCEL_PROJECT_ID: ${{ needs.terraform.outputs.vercel_project_id || secrets.VERCEL_PROJECT_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
     steps:
       - name: Checkout
@@ -433,8 +451,34 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
 
-      # `pull` fetches the project settings Terraform wrote — including
-      # VITE_API_BASE_URL, which is where the Cloud Run URL enters the build.
+      # Vite inlines VITE_* at BUILD time, so this is where the Cloud Run URL
+      # enters the bundle. Written on every deploy rather than once by hand:
+      # that way a backend URL that ever does change corrects itself, and a
+      # project restored from the dashboard cannot quietly build against
+      # nothing. Remove-then-add because `vercel env add` refuses to overwrite.
+      - name: Point the Vercel project at this backend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+        run: |
+          API_BASE_URL='${{ needs.terraform.outputs.api_base_url }}'
+          if [ -z "$API_BASE_URL" ]; then
+            API_BASE_URL='${{ needs.backend.outputs.backend_url }}/api'
+          fi
+          if [ "$API_BASE_URL" = "/api" ]; then
+            echo "::error title=No backend URL::Neither Terraform nor the Cloud Run deploy produced a backend URL, so the bundle would be built against nothing."
+            exit 1
+          fi
+
+          for TARGET in production preview; do
+            for PAIR in "VITE_API_BASE_URL=$API_BASE_URL" "VITE_DATA_MODE=live"; do
+              NAME="${PAIR%%=*}"
+              VALUE="${PAIR#*=}"
+              vercel env rm "$NAME" "$TARGET" --yes --token="$VERCEL_TOKEN" >/dev/null 2>&1 || true
+              printf '%s' "$VALUE" | vercel env add "$NAME" "$TARGET" --token="$VERCEL_TOKEN"
+            done
+          done
+          echo "VITE_API_BASE_URL=$API_BASE_URL"
+
       - name: Pull Vercel project settings
         run: vercel pull --yes --environment=production --token='${{ secrets.VERCEL_API_TOKEN }}'
 

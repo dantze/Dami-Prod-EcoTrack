@@ -26,27 +26,80 @@ on purpose and runs on every PR; it is the only check that covers files no
 project workflow watches. `audit.yml` is scheduled, not a PR gate. See the
 `verify` skill for which checks a given diff actually needs.
 
-**`infra/` describes the whole deployment**, in Terraform: Cloud Run, Cloud SQL,
-Artifact Registry, Secret Manager, a VPC, two least-privilege service accounts,
-and the Vercel project. `deploy.yml` applies it; `ci-infra.yml` is its
-path-filtered gate (`terraform fmt` + `validate`, no credentials needed).
+**`infra/` describes the GCP half of the deployment**, in Terraform: Cloud Run
+(one service and two jobs), Cloud SQL, Cloud Storage, Artifact Registry, Secret
+Manager, Cloud Scheduler, a VPC and three least-privilege service accounts. Six
+modules under `infra/modules/` — `network`, `database`, `registry`, `iam`,
+`storage`, `backend` — with
+`infra/main.tf` holding only locals, the API enablement and the module wiring,
+and the root `variables.tf` / `outputs.tf` holding every name `deploy.yml` binds
+to. **The `.tf` files carry no comments**; what used to be written in them is in
+this file. `deploy.yml` applies it; `ci-infra.yml` is its path-filtered gate
+(`terraform fmt` + `validate`, no credentials needed).
+
+**There is one deployment, named `dev`.** `var.environment` is a token in every
+resource name (`ecotrack-dev-postgres`) and nothing else — there is no staging
+and no second stack. **It is not the Spring profile.** `spring_profiles_active`
+stays `prod` regardless, because that is what selects Postgres; a container
+running the Spring `dev` profile would use the H2 file DB in ephemeral container
+storage, and with `min_instances = 0` every write would vanish the moment the
+instance went away. The fallback names in `deploy.yml` follow the same
+`ecotrack-dev-*` shape and must be changed with it.
+
+**Vercel is deliberately NOT in Terraform.** It was, and everything it managed
+was a one-time setting — the project, its build commands, its two `VITE_*`
+variables — bought at the price of a Vercel token in the blast radius of every
+`terraform apply` and dashboard edits being silently reverted. So the project is
+created by hand, and `deploy.yml` writes `VITE_API_BASE_URL` and
+`VITE_DATA_MODE` onto it with `vercel env` before each build. Terraform still
+knows the project's NAME, because the backend's CORS list is computed from it.
 
 It replaced a single DigitalOcean droplet that ran backend + web + Postgres +
-Caddy under one `docker compose` (TODO-71). **`docker-compose.yml` and the
-`Caddyfile` are still here and still work — they are the LOCAL stack now**, and
-are deployed nowhere.
+Caddy under one `docker compose` (TODO-71). **What is left of that is
+`docker-compose.yml`, cut down to Postgres + the backend** (TODO-91): the SPA,
+`web/Dockerfile` and the `Caddyfile` are gone, because serving both from one
+origin modelled a shape production no longer has. It is deployed nowhere, and it
+is not the normal way to run the backend either — `./gradlew bootRun` is, on H2.
+Compose is for the one thing bootRun cannot do: run against real Postgres.
 
-Two things about the app changed with the move, both easy to undo by accident:
+Five things hold that description up, all easy to undo by accident:
 
 - **CORS is load-bearing.** Caddy served the SPA and the API from one origin;
-  Vercel and Cloud Run are two. `main.tf` computes
-  `ECOTRACK_CORS_ALLOWED_ORIGINS` from the Vercel project name. Local compose is
+  Vercel and Cloud Run are two. `infra/main.tf` computes
+  `ECOTRACK_CORS_ALLOWED_ORIGINS` from `var.vercel_project_name` plus
+  `var.web_custom_domains`, because Vercel's production alias is
+  deterministically `<project-name>.vercel.app`. Nothing reads it back off
+  Vercel, so **renaming the Vercel project means editing that variable and
+  re-applying** — otherwise the backend refuses the frontend. Local compose is
   still one origin, so **a CORS failure cannot be reproduced locally** — it is
   the one class of bug this deployment can produce that the old one could not.
-- **`backend_min_instances` must stay ≥ 1.** The backend's two nightly
-  `@Scheduled` jobs — `RecurringTaskScheduler` at 02:00, session pruning at
-  03:30 — need a live JVM holding CPU. Cloud Run at zero instances runs no code
-  and logs nothing, so they would silently never fire. Terraform validates it.
+- **The nightly work runs as Cloud Run Jobs, and the backend scales to zero.**
+  There are no `@Scheduled` methods left. `job/JobRunner.java` is an
+  `ApplicationRunner` under the `job` profile: it reads `ECOTRACK_JOB`
+  (`generate-tasks` → `RecurringTaskScheduler.generateUpcomingTasks`,
+  `prune-sessions` → `TokenService.pruneStaleSessions`), runs exactly that one,
+  and exits — non-zero on an unknown or missing name, or on a throw, because the
+  exit code is the only thing Cloud Run reads. Two Cloud Scheduler jobs start
+  them at 02:00 and 03:30 `Europe/Bucharest` against the jobs' `:run` API, with
+  an **OAuth** token (that API does not take OIDC). The jobs run the same image
+  as the service, so `min_instances` is 0 and there is no `cpu_idle` override
+  (TODO-80), and raising `max_instances` no longer multiplies the nightly work
+  (TODO-81).
+- **The VPC exists because of the JDBC URL.** `application-prod.properties`
+  builds `jdbc:postgresql://HOST:PORT/NAME` from env vars, and the Cloud SQL
+  Auth proxy presents a unix socket the plain Postgres driver cannot dial. So
+  Cloud SQL gets a private IP and Cloud Run reaches it over direct VPC egress —
+  and `roles/cloudsql.client` is deliberately **not** granted to the runtime
+  service account, since that is the proxy's permission. Add it only together
+  with a socket factory on the classpath.
+- **`ignore_changes` on every image field.** CI pushes a commit-tagged image and
+  rolls it out with `gcloud`, on the service and on both jobs; Terraform's copy
+  of `image` is stale by design. Without it the next `apply` would quietly roll
+  production back to the placeholder.
+- **Nothing sensitive is hardcoded, and `ci-infra.yml` checks it recursively.**
+  `gcp_credentials_json`, `vercel_api_token`, `db_password` and `backend_secrets`
+  must stay `sensitive = true` in the root `infra/variables.tf`, which that
+  workflow greps by name.
 
 **Nothing has been applied yet**: there is no GCP project and no Vercel account,
 so `deploy.yml` skips itself (green) until the secrets exist. `DEPLOYMENT.md`
@@ -66,7 +119,8 @@ cd backend
 ./gradlew bootRun                # H2 file DB
 ./gradlew bootRun --args='--spring.profiles.active=dev'    # same H2 DB
 
-# docker (full stack: postgres + backend + web + caddy with auto HTTPS)
+# docker (postgres + backend only; the SPA runs from `npm run dev`)
+# Not needed day to day - bootRun above uses H2. This is for real Postgres.
 docker compose up -d --build
 docker compose logs -f backend
 docker compose down
@@ -342,7 +396,8 @@ generation and inventory adjustment happen inside them.
 **`Task` has three independent parents** — `route_id`, `order_id`, and
 `recurring_plan_id`, each nullable and meaning something different. Tasks are
 generated from orders and from `RecurringIgienizare` plans; `RecurringTaskScheduler`
-tops up indefinite plans nightly at 02:00.
+tops up indefinite plans nightly at 02:00, as the `generate-tasks` Cloud Run Job
+rather than on a timer inside the service.
 
 **Retiring a subscription is serialised with a row lock.**
 `SubscriptionRepository.findByIdForUpdate` is a `SELECT … FOR UPDATE` on the one
@@ -363,7 +418,9 @@ it is on the classpath, and a second registration would double-add headers.
 **Profiles.** Base and `dev` both use the H2 file DB at `backend/data/damiprod`;
 `dev` overrides nothing that matters any more. `prod` switches to Postgres,
 building its JDBC URL from `DB_HOST`/`DB_PORT`/`DB_NAME` env vars. `test` =
-in-memory H2, `create-drop`.
+in-memory H2, `create-drop`. `job` is additive — the nightly Cloud Run Jobs run
+`prod,job`, and all it does is set
+`spring.main.web-application-type=none` so the one-shot process starts no server.
 `DataLoader` seeds the role rows and the product catalogue, and only when those
 tables are empty. It no longer seeds employees — the first enrolled device
 becomes the first ADMIN instead.
@@ -494,17 +551,18 @@ or `@/mocks` directly. That rule is the only thing keeping the two implementatio
 substitutable. The `web-data-layer` skill has the full procedure.
 
 Mock is the default for local development, where it needs no backend at all.
-**Production builds live mode**, on Vercel: Terraform writes `VITE_DATA_MODE=live`
-and an ABSOLUTE `VITE_API_BASE_URL` — the Cloud Run URL plus `/api` — into the
-Vercel project, and Vite inlines both at build time. The absolute URL is why the
-frontend must be rebuilt whenever the backend URL changes, and why `deploy.yml`
-redeploys Vercel after Cloud Run rather than in parallel with it.
+**Production builds live mode**, on Vercel: `deploy.yml` writes
+`VITE_DATA_MODE=live` and an ABSOLUTE `VITE_API_BASE_URL` — the Cloud Run URL
+plus `/api` — onto the Vercel project with `vercel env`, on every deploy, and
+Vite inlines both at build time. The absolute URL is why the frontend must be
+rebuilt whenever the backend URL changes, and why `deploy.yml` redeploys Vercel
+after Cloud Run rather than in parallel with it.
 
-`web/Dockerfile` still exists and still defaults to a relative
-`VITE_API_BASE_URL=/api`, because it now builds the LOCAL compose stack, where
-Caddy does serve both from one origin. Production is not that shape any more:
-`config.ts`'s `/api` fallback is a diagnostic for a build that forgot the
-variable, not the deployment.
+`web/Dockerfile` is gone (TODO-91) — nothing built the SPA into an image once
+Caddy went, and while it existed it was a second place a `VITE_*` default could
+drift from the deployed one. `config.ts`'s `/api` fallback is now purely a
+diagnostic for a build that forgot the variable; no build produces it on
+purpose.
 
 **`src/api/live/normalize.ts` absorbs the wire/domain mismatch.** The Spring
 entities do not serialise cleanly into `@/types/domain`: associations are
@@ -639,9 +697,23 @@ is the safety net that made deleting the column acceptable. The database COLUMN
 still exists — `ddl-auto=update` never drops — and the manual DDL is in
 `DEPLOYMENT.md` too.
 
-**Task photos are private objects, served as presigned URLs** (TODO-46).
-`PhotoService.uploadPhoto` writes `ObjectCannedACL.PRIVATE`, and
-`GET /api/tasks/{id}/photos` signs a short-lived link per request rather than
+**Task photos live in a GCS bucket, with no credential anywhere** (TODO-79).
+`PhotoService` uses `google-cloud-storage` and Application Default Credentials,
+so on Cloud Run it authenticates as the runtime service account, which holds
+`objectAdmin` on that one bucket. The DigitalOcean Spaces key pair — the last
+thing keeping a non-GCP dependency alive, and the only reason
+`BACKEND_SECRETS_JSON` had to exist — is gone. **The bucket's own settings are
+the privacy guarantee**: `uniform_bucket_level_access` refuses per-object ACLs
+outright and `public_access_prevention = "enforced"` refuses a public IAM
+binding, so an object cannot be made world-readable by a code change.
+
+One binding is easy to miss and breaks reads only: V4 signing has no private key
+to sign with, so it goes through the IAM `signBlob` API and the runtime service
+account holds **`roles/iam.serviceAccountTokenCreator` on itself**. Remove it and
+uploads keep working while every photo link starts failing.
+
+**Photos are served as short-lived signed URLs** (TODO-46).
+`GET /api/tasks/{id}/photos` signs a link per request rather than
 returning the stored URL. Two consequences that are easy to get wrong:
 
 - **The signature carries the access, so the guard on the endpoint is the whole
@@ -656,8 +728,8 @@ returning the stored URL. Two consequences that are easy to get wrong:
 This was not a theoretical exposure: the object key is
 `poze cabine/{taskId}_{clientName}/{n}`, so a public URL named a customer and its
 last segment counted from 1 — one leaked link walked that client's other photos.
-Objects uploaded before this change keep their old public ACL; `DEPLOYMENT.md`
-has the one-time fix.
+The GCS bucket is new and has never held a public object; what may still hold
+one is the old Spaces bucket, which `DEPLOYMENT.md` decommissions.
 
 ## Conventions
 
@@ -742,13 +814,6 @@ Deliberate or unresolved; do not assume these are safe.
   obviously-wrong-but-diagnosable otherwise; an **empty** value counts as unset
   there, since an unset GitHub variable interpolates to `''` and `??` would not
   catch it.
-- **The nightly schedulers depend on a Terraform variable.**
-  `RecurringTaskScheduler` (02:00) and session pruning (03:30) are Spring
-  `@Scheduled` methods, so they run only while an instance is alive with CPU.
-  `backend_min_instances` is validated `>= 1` for that reason, and raising
-  `backend_max_instances` has the opposite hazard: the jobs run on EVERY
-  instance, with nothing guarding against a concurrent double-generation
-  (TODO-81).
 
 ## Security scanning
 

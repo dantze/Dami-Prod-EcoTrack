@@ -54,26 +54,18 @@ NO_CI_REQUIRED = {
     "TODO.md",
     "DEPLOYMENT.md",    # the runbook; prose, ships in no build
     ".env.example",     # a template of NAMES only; read by nothing at build time
-    # The Caddyfile configures the LOCAL stack's edge and nothing else since
-    # TODO-71 - production is Vercel and Cloud Run, each with its own managed
-    # certificate, and neither reads it. It used to be covered incidentally, by
-    # the old deploy.yml's `paths:` filter watching it for a VPS rebuild; the
-    # workflow that replaced it has no reason to. Exempt rather than validated
-    # because breaking it now breaks `docker compose up` for the person who
-    # broke it, immediately - there is no deployment left for it to break.
-    "Caddyfile",
-    # The compose files are still load-bearing, as the LOCAL full-stack
-    # environment (they stopped being a deployment in TODO-71), and no ci-*.yml
-    # validates them, because repo-hygiene.yml does instead. Its
+    # docker-compose.yml is still load-bearing, as the only way to run the
+    # backend against real Postgres locally (it stopped being a deployment in
+    # TODO-71 and lost its web + Caddy half in TODO-91), and no ci-*.yml
+    # validates it, because repo-hygiene.yml does instead. Its
     # "Validate compose files" step runs
     # `docker compose config -q` on every docker-compose*.yml on every PR, twice:
     # once on the `:-` defaults and once with --env-file .env.example. That
     # resolves interpolation and validates the Compose schema, not just the YAML
-    # (TODO-29). They are exempt from the ci-*.yml requirement because they are
+    # (TODO-29). It is exempt from the ci-*.yml requirement because it is
     # covered - by a check that has no `paths:` filter, which is stronger than a
     # fourth ci-*.yml would have been.
     "docker-compose.yml",
-    "docker-compose.dev-hosted.yml",
 }
 NO_CI_REQUIRED_GLOBS = ("HANDOFF-*.md",)
 
@@ -215,6 +207,12 @@ def check_ci_coverage(changed: list[str]) -> None:
 
     uncovered: list[str] = []
     for path in changed:
+        # A DELETED path needs no workflow. `git diff --name-only` lists it just
+        # like a changed one, so without this, removing a file whose top-level
+        # entry was in NO_CI_REQUIRED fails the check for the entry that was
+        # correctly removed with it (found deleting the Caddyfile, TODO-91).
+        if not (REPO_ROOT / path).exists():
+            continue
         if any(path_matches(path, pattern) for pattern in every_pattern):
             continue
         top = path.split("/", 1)[0]

@@ -267,7 +267,7 @@ class TaskControllerTest {
     // -----------------------------------------------------------------------
     /**
      * The stored URL is an identity, not a fetchable link: objects are PRIVATE
-     * in Spaces, so what goes over the wire is a presigned URL minted per
+     * in the bucket, so what goes over the wire is a signed URL minted per
      * request (TODO-46). This asserts the endpoint SIGNS rather than echoing —
      * echoing would hand out links that 403, and, worse, would be what a
      * regression back to PUBLIC_READ looks like from the outside.

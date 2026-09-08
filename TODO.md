@@ -27,21 +27,19 @@ unless its status says otherwise.
 **Status legend:** `[ ]` not started · `[~]` in progress · `[DONE]` done ·
 `[POSTPONED]` deliberately deferred · `[?]` needs a decision first
 
-**Next free ID: TODO-88.** (Highest used is TODO-87.)
+**Next free ID: TODO-92.** (Highest used is TODO-91.)
 
 ---
 
-## Still open — 7 of 87
+## Still open — 5 of 91
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
 - **TODO-17** `[POSTPONED]` — All other AI ideas *(F)*
-- **TODO-79** `[ ]` — The "GCP deployment" still depends on a DigitalOcean bucket *(G)*
-- **TODO-80** `[ ]` — Paying for a warm instance to run two cron jobs *(G)*
-- **TODO-81** `[ ]` — Both nightly jobs run on EVERY Cloud Run instance *(G)*
 - **TODO-82** `[ ]` — Two Mantine providers are mounted and neither is ever used *(G)*
 - **TODO-83** `[ ]` — `Button`'s default variant is `secondary`, and one screen relied on it by accident *(G)*
 - **TODO-87** `[ ]` — The bundle ceiling still describes headroom over a build CI no longer makes *(G)*
+- **TODO-89** `[ ]` — What `infra/` deliberately does not do *(G)*
 
 **Done, but flagged by whoever did it** — not open, but not finished-and-forgotten
 either:
@@ -136,15 +134,19 @@ full text lives further down.
 | TODO-76 | `[DONE]` | A | `AdminController` answers in three shapes, none of them the app's |
 | TODO-77 | `[DONE]` | J | Two confirmation dialogs, with different accessibility |
 | TODO-78 | `[DONE]` | J | `.nvmrc` exists now but nothing tells a new contributor |
-| TODO-79 | **`[ ]`** | G | The "GCP deployment" still depends on a DigitalOcean bucket |
-| TODO-80 | **`[ ]`** | G | Paying for a warm instance to run two cron jobs |
-| TODO-81 | **`[ ]`** | G | Both nightly jobs run on EVERY Cloud Run instance |
+| TODO-79 | `[DONE]` | G | The "GCP deployment" still depends on a DigitalOcean bucket |
+| TODO-80 | `[DONE]` | G | Paying for a warm instance to run two cron jobs |
+| TODO-81 | `[DONE]` | G | Both nightly jobs run on EVERY Cloud Run instance |
 | TODO-82 | **`[ ]`** | G | Two Mantine providers are mounted and neither is ever used |
 | TODO-83 | **`[ ]`** | G | `Button`'s default variant is `secondary`, and one screen relied on it by accident |
 | TODO-84 | `[DONE]` | H | The office signpost sends staff to the backend, not the web app |
 | TODO-85 | `[DONE]` | H | Cleartext HTTP is enabled app-wide, for a backend that is HTTPS-only |
 | TODO-86 | `[DONE]` | G | `python3` is gone again, so the hygiene guards ran nowhere for TODO-72/74 |
 | TODO-87 | **`[ ]`** | G | The bundle ceiling still describes headroom over a build CI no longer makes |
+| TODO-88 | `[DONE]` | G | The cost table priced a warm instance nobody had chosen |
+| TODO-89 | **`[ ]`** | G | What `infra/` deliberately does not do |
+| TODO-90 | `[DONE]` | G | Vercel was in Terraform and bought nothing |
+| TODO-91 | `[DONE]` | G | The local Docker stack still modelled the droplet |
 
 ---
 
@@ -3209,7 +3211,7 @@ entirely.
 *Found while doing TODO-32.*
 
 ---
-### TODO-79 `[ ]` The "GCP deployment" still depends on a DigitalOcean bucket
+### TODO-79 `[DONE]` The "GCP deployment" still depends on a DigitalOcean bucket
 Found while doing TODO-71. Task photos are written to and read from
 **DigitalOcean Spaces** — `PhotoService` points the AWS S3 SDK at
 `https://$DO_SPACES_REGION.digitaloceanspaces.com`, and the presigned URLs that
@@ -3231,7 +3233,39 @@ flip) that assume the bucket is where it is.
 Not urgent: nothing is broken and nothing is unsafe. It is a "how many bills do
 we want" question, and worth answering before more objects accumulate.
 
-### TODO-80 `[ ]` Paying for a warm instance to run two cron jobs
+**Done — moved to GCS, and it removed a credential rather than relocating one.**
+The deciding argument turned out not to be the bill. Spaces needs an access key
+pair, which had to be created by hand, pasted into `BACKEND_SECRETS_JSON`,
+written into `terraform.tfstate` in plaintext on its way to Secret Manager, and
+rotated by somebody. A GCS bucket needs none of that: the Cloud Run instance has
+an identity, so `PhotoService` uses Application Default Credentials and the
+bucket's IAM policy names the runtime service account. That deleted the last
+entry `BACKEND_SECRETS_JSON` had, which leaves exactly one runtime secret in the
+whole application — the database password, which Terraform generates and nobody
+types.
+
+`PhotoService` moved from the AWS S3 SDK to `google-cloud-storage`; its public
+surface (`uploadPhoto`, `deletePhoto`, `presignedUrl(s)`, `ALLOWED_IMAGE_TYPES`)
+is unchanged, so no caller moved. Three things are worth knowing:
+
+- **The privacy guarantee got stronger, not equivalent.** TODO-46 wrote
+  `ObjectCannedACL.PRIVATE` per object, which a code change could undo. The
+  bucket sets `uniform_bucket_level_access` (per-object ACLs are refused) and
+  `public_access_prevention = "enforced"` (a public IAM binding is refused), so
+  a public object is not reachable by editing our code at all.
+- **V4 signing has no private key**, so it goes through the IAM `signBlob` API
+  and the runtime service account needs `roles/iam.serviceAccountTokenCreator`
+  **on itself**. Missing, uploads work and every read link 403s — an asymmetry
+  worth recognising quickly.
+- **Nothing was copied.** The migration concern this item raised was the objects
+  already in Spaces, and there are none that matter: the app has never left
+  development, and TODO-45 records the owner confirming no ID photos were ever
+  uploaded. `DEPLOYMENT.md`'s two one-time Spaces operations are folded into a
+  single decommissioning step — check both prefixes, delete the bucket, revoke
+  the keys. If real photos ever had existed, this would have needed a copy step
+  and a dual-read window instead.
+
+### TODO-80 `[DONE]` Paying for a warm instance to run two cron jobs
 `backend_min_instances` is pinned at 1, and validated, because
 `RecurringTaskScheduler` (02:00) and `TokenService.pruneStaleSessions` (03:30)
 are Spring `@Scheduled` methods that need a live JVM holding CPU at that moment.
@@ -3255,7 +3289,27 @@ surface. An unauthenticated "run the nightly job" URL is a denial-of-service
 lever and a way to generate unbounded tasks, so the OIDC half is not optional —
 which is most of the work.
 
-### TODO-81 `[ ]` Both nightly jobs run on EVERY Cloud Run instance
+**Done — as Cloud Run Jobs, not as an HTTP endpoint.** The alternative sketched
+above was rejected on exactly the ground it names: an endpoint that runs the
+night's work is a new authenticated write on the public API, needing a
+`SecurityConfig` row, and it would still be reachable while the service is. Two
+`google_cloud_run_v2_job` resources on the same image have no URL at all. The
+process is `job/JobRunner.java`, an `ApplicationRunner` under a `job` profile
+that reads `ECOTRACK_JOB`, runs that one job and exits non-zero if it cannot;
+`@EnableScheduling` and both `@Scheduled` annotations are gone, along with
+`ecotrack.security.session-prune-cron`. Cloud Scheduler starts each job with an
+**OAuth** token (the jobs `:run` API does not take OIDC), as a third service
+account holding `run.invoker` on those two jobs and nothing else.
+
+With the JVM no longer needed at 02:00, `backend_min_instances` defaults to 0
+with no validation and the `cpu_idle` override is gone, so the service is
+request-billed: ~$58/month becomes ~$15, and the cost table moved to
+`DEPLOYMENT.md`. The accepted cost is one cold start on the first request of the
+morning. The one new failure mode is a deploy that rolls the service and forgets
+the jobs, so `deploy.yml` runs `gcloud run jobs update` on each of them from the
+`backend_job_names` output.
+
+### TODO-81 `[DONE]` Both nightly jobs run on EVERY Cloud Run instance
 The other half of TODO-71's scheduler problem, and the opposite of TODO-80.
 
 `@Scheduled` is per-JVM. One always-on container had exactly one, so both
@@ -3280,6 +3334,13 @@ establishes in this codebase), ShedLock, or moving the jobs out of the app
 entirely per TODO-80 — which solves this one too, since Cloud Scheduler fires
 once and hits one instance. That overlap is worth noting before either is
 picked.
+
+**Done, by the third option.** No lock and no ShedLock: there is no `@Scheduled`
+method left to run twice. Each night is one Cloud Run Job execution, `task_count
+= 1`, one process, whatever the service is doing at the time — so
+`backend_max_instances` is now an ordinary capacity setting with no hidden
+second meaning, and it dropped to 2. `max_retries = 1` means a failed execution
+is retried once and then left failed rather than looped.
 
 ### TODO-82 `[ ]` Two Mantine providers are mounted and neither is ever used
 Found while doing TODO-60. `src/theme/AppProviders.tsx` mounts `ModalsProvider`
@@ -3432,6 +3493,128 @@ Whichever it is, do it in a commit that changes only the number, so the first re
 build afterwards is unambiguous.
 
 *Found while doing TODO-55.*
+
+### TODO-88 `[DONE]` The cost table priced a warm instance nobody had chosen
+`infra/README.md` budgeted **~$20–27/month**, of which ~$10–15 was a Cloud Run
+instance kept alive for two cron jobs that take seconds — and the table said so,
+in a sentence explaining that neither big line could scale to zero. Only one of
+them genuinely could not: Cloud SQL has no idle mode, while the Cloud Run figure
+was a consequence of a design choice (TODO-80), not of the platform.
+
+Left as a separate item because it is a documentation problem in its own right:
+the figure was correct for what was built, and a reader comparing this
+deployment against alternatives would have been comparing against the wrong
+number.
+
+**Done with TODO-80.** The warm instance is gone, so the figure went with it.
+`infra/README.md` is an architecture diagram and nothing else now; the table
+lives in `DEPLOYMENT.md` and reads ~$10 Cloud SQL, ~$5 Cloud Run, **~$15/month**,
+with the one line that cannot scale to zero named as such.
+
+### TODO-89 `[ ]` What `infra/` deliberately does not do
+A record rather than a task, kept because the list it replaces was deleted with
+`infra/README.md`'s prose. None of these is a bug and none is scaffolded:
+
+- **No monitoring, alerting or uptime check.** Nothing notices a failed nightly
+  job execution or a service that stopped serving; the only channel is Cloud
+  Logging, which nobody is watching.
+- **No Cloud Armor or rate limiting** in front of Cloud Run. The service is
+  `allUsers`-invokable because the SPA's fetches come from the visitor's
+  browser, so the enrollment rate limit in the app is the only throttle.
+- **No custom domain for the backend.** Vercel gets the `*.run.app` URL. A
+  custom domain on the API would need its own mapping and a CORS re-apply.
+- **Nothing for `mobile/`.** It ships through EAS (`deploy-mobile.yml`), and its
+  two `EXPO_PUBLIC_*` variables are set by hand from Terraform outputs.
+- **Nothing for Vercel.** It did, until TODO-90 removed it.
+- **Object storage is here now.** Task photos moved to a GCS bucket the
+  `storage` module creates (TODO-79); this entry used to say the opposite.
+
+**Deciding it needs** nothing until the deployment is real: every one of these
+is a "once somebody depends on it" question, and nobody does yet — there is no
+GCP project. The first one to force itself will be monitoring, the first time a
+02:00 job fails and nothing says so.
+
+### TODO-90 `[DONE]` Vercel was in Terraform and bought nothing
+Asked directly what managing the Vercel project in Terraform did for this
+deployment, the honest answer was: nothing that is not a one-time setting.
+Creating the project, its four build settings, its two `VITE_*` variables and a
+custom domain are each done once, in about two minutes of clicking.
+
+The one argument that looked strong — Terraform reads the Cloud Run URL off the
+resource and writes it into `VITE_API_BASE_URL`, which cannot be typed ahead of
+time — does not survive contact with the fact that a Cloud Run v2 URL is derived
+from the service name and a per-project hash. It is stable across redeploys and
+across a delete-and-recreate; it moves only if the service is renamed or the
+region changes.
+
+Against that, the costs were charged continuously: `terraform apply` needed a
+Vercel API token, so a Vercel credential sat in the blast radius of every
+database change; `terraform plan` needed Vercel reachable to plan a VPC edit; a
+build setting changed in the dashboard was silently reverted by the next apply;
+and a partner provider had to be tracked in the lock file. Those trades are
+worth making for a second environment or a team, and this is neither.
+
+**Done.** `modules/frontend`, the `vercel` provider and nine variables
+(`vercel_api_token`, `vercel_team_id`, `vercel_git_repository`,
+`vercel_production_branch`, `web_root_directory`, `web_install_command`,
+`web_build_command`, `web_output_directory`, `web_data_mode`) are gone;
+`terraform.tfvars.example` is down to one line. `vercel_project_name` and
+`web_custom_domains` stay, because the backend's CORS origin list is computed
+from them and always was — nothing was ever read back off a Vercel resource.
+
+Two things moved rather than disappeared. `deploy.yml` writes
+`VITE_API_BASE_URL` and `VITE_DATA_MODE` onto the project with `vercel env`
+before every build, from the `backend_api_base_url` output, which is strictly
+better than the apply-time write it replaces: it is re-asserted on every deploy
+instead of only when Terraform runs. And `VERCEL_PROJECT_ID` is a required
+secret now rather than a Terraform output — `deploy.yml` already carried it as a
+fallback, so this promoted the fallback to the path.
+
+**What it costs, and it is worth naming:** the Vercel project's build settings
+are dashboard state, in no file. `DEPLOYMENT.md` step 1b is the record of what
+they should be, and nothing checks it.
+
+### TODO-91 `[DONE]` The local Docker stack still modelled the droplet
+Asked whether Docker was still needed at all. Three separate answers, and only
+one of them was "yes".
+
+`backend/Dockerfile` is **permanent**: Cloud Run runs container images, and that
+one image is what the service and both nightly jobs run. It is built on the
+GitHub runner, so no Docker is needed on a developer machine for it.
+
+`docker-compose.yml` was the whole droplet — Postgres, backend, the SPA and
+Caddy terminating TLS for both on ONE origin. Production has been two origins
+since TODO-71, so the full-stack recipe modelled a shape that no longer exists:
+it could not reproduce a CORS failure, which is precisely the class of bug this
+deployment can produce and the old one could not. It was also not how anyone
+runs the backend — `./gradlew bootRun` on H2 is, and always was.
+
+`docker-compose.dev-hosted.yml` was a hosted dev environment for UI and mobile
+testing. Cloud Run is that now, and nothing referenced the file except its own
+header comment and two guard scripts' companion lists.
+
+**Done.** `docker-compose.dev-hosted.yml`, the `Caddyfile` and `web/Dockerfile`
+are deleted, and `docker-compose.yml` is Postgres + the backend. What survives is
+the one capability `bootRun` cannot offer: **the backend against real Postgres**,
+which matters because production is Postgres, local defaults to H2, and
+`ddl-auto=update` has no migration tool behind it. `DEPLOYMENT.md`'s *Local*
+section leads with the no-Docker loop and presents compose as the Postgres
+option, paired with `npm run dev` — a two-origin arrangement, i.e. production's
+shape.
+
+Deleting `web/Dockerfile` has a second effect worth naming: it was the last
+place a `VITE_*` default could disagree with the deployed one, which TODO-54 and
+TODO-87 both had to reason around. `config.ts`'s `/api` fallback is now purely a
+diagnostic for a build that forgot the variable; no build produces it on purpose.
+
+One guard bug fell out of it. `repo_hygiene.py`'s CI-coverage check read
+`git diff --name-only`, which lists DELETED paths alongside changed ones, and
+asked which workflow watches them — so removing `Caddyfile` and
+`docker-compose.dev-hosted.yml` failed the check for the very NO_CI_REQUIRED
+entries that were correctly deleted with them. The alternative was leaving
+tombstone entries in that set forever. It skips paths that no longer exist now.
+
+*Found while doing TODO-79.*
 
 ## H. Mobile
 

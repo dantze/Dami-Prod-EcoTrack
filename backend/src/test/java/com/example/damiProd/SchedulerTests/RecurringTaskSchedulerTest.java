@@ -11,10 +11,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.scheduling.support.CronExpression;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -60,23 +58,16 @@ class RecurringTaskSchedulerTest {
     }
 
     // -----------------------------------------------------------------------
-    // The cron expression itself
+    // The schedule
     // -----------------------------------------------------------------------
 
     @Test
-    void cronExpression_fires_atTwoAmDaily() throws NoSuchMethodException {
-        Scheduled annotation = RecurringTaskScheduler.class
-                .getMethod("generateUpcomingTasks")
-                .getAnnotation(Scheduled.class);
-
-        assertThat(annotation).isNotNull();
-
-        CronExpression cron = CronExpression.parse(annotation.cron());
-        LocalDateTime next = cron.next(LocalDateTime.of(2026, 5, 4, 12, 0));
-
-        assertThat(next).isEqualTo(LocalDateTime.of(2026, 5, 5, 2, 0));
-        // and again the following night, i.e. it really is daily
-        assertThat(cron.next(next)).isEqualTo(LocalDateTime.of(2026, 5, 6, 2, 0));
+    void nothingHereCarriesItsOwnSchedule() {
+        // The 02:00 cron lives in Cloud Scheduler and the process is a Cloud
+        // Run Job (TODO-80/81). An @Scheduled here would run a second copy on
+        // every serving instance, which is exactly what was removed.
+        assertThat(RecurringTaskScheduler.class.getMethods())
+                .noneMatch(method -> method.isAnnotationPresent(Scheduled.class));
     }
 
     // -----------------------------------------------------------------------

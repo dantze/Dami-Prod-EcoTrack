@@ -92,9 +92,9 @@ public class ClientService {
         for (Order order : orders) {
             // EVERY task of the order, not just the first (TODO-34): the orders
             // are deleted below, so a task left behind fails the delete on its
-            // FK — and its photos would be orphaned in Spaces either way.
+            // FK — and its photos would be orphaned in the bucket either way.
             for (Task task : taskRepository.findAllByOrder_IdOrderByIdAsc(order.getId())) {
-                // Delete task photos from Digital Ocean Spaces before removing task
+                // Delete task photos from the GCS bucket before removing task
                 List<TaskPhoto> photos = taskPhotoRepository.findByTaskId(task.getId());
                 for (TaskPhoto photo : photos) {
                     // The cascade continues either way (see PhotoService.deletePhoto),
@@ -115,7 +115,7 @@ public class ClientService {
         }
         orderRepository.flush();
         // deleteClientIdPhoto(id) was called here and above, deleting the
-        // client's stored identity document from Spaces before the row that
+        // client's stored identity document from the bucket before the row that
         // referenced it went. Nothing stores one any more (TODO-14) and the
         // legacy objects are drained (TODO-45), so there is nothing to delete.
         // Task photos above are a different thing and still cascade.

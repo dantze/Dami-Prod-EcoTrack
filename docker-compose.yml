@@ -1,16 +1,18 @@
 # =========================================================================
-# The LOCAL full-stack environment: Postgres + backend + web + Caddy.
+# The LOCAL backend environment: Postgres + the backend image.
 #
-# THIS IS NOT DEPLOYED ANYWHERE. It used to be — one `docker compose up` on a
-# DigitalOcean droplet was the production deployment — and it is kept because
-# it is still the fastest way to run the whole system on one machine. Production
-# is Cloud Run + Cloud SQL + Vercel now; see infra/ and DEPLOYMENT.md.
+# THIS IS NOT DEPLOYED ANYWHERE, and it is not how you normally run the backend
+# either — `./gradlew bootRun` does that on H2, with no Docker at all. This
+# exists for the one thing bootRun cannot give you: the backend against REAL
+# POSTGRES. Production is Postgres, local defaults to H2, and `ddl-auto=update`
+# with no migration tool means that gap can bite.
 #
-# ONE WAY IT NO LONGER RESEMBLES PRODUCTION: Caddy serves the SPA and proxies
-# /api on the same host, so every API call here is same-origin and CORS never
-# applies. In production the SPA is on Vercel and the API on Cloud Run — two
-# origins — so a CORS misconfiguration is invisible from here. DEPLOYMENT.md's
-# "Local" section has a two-origin arrangement for when that matters.
+# It used to bring up the SPA behind Caddy too, because one `docker compose up`
+# on a droplet WAS the deployment. That went with TODO-91: Caddy served the SPA
+# and /api on ONE origin, and production is two (Vercel and Cloud Run), so the
+# full-stack recipe modelled a shape that no longer exists. Run the SPA with
+# `npm run dev` against this backend instead — DEPLOYMENT.md's "Local" section
+# has that two-origin arrangement, which is what production actually looks like.
 # =========================================================================
 services:
   # =========================================================================
@@ -57,14 +59,13 @@ services:
       DB_NAME: ${DB_NAME:-damiprod}
       DB_USER: ${DB_USER:-damiprod_user}
       DB_PASS: ${DB_PASS:-secure_db_password}
-      DO_SPACES_ACCESS_KEY: ${DO_SPACES_ACCESS_KEY:-}
-      DO_SPACES_SECRET_KEY: ${DO_SPACES_SECRET_KEY:-}
-      DO_SPACES_BUCKET: ${DO_SPACES_BUCKET:-}
-      DO_SPACES_REGION: ${DO_SPACES_REGION:-fra1}
+      # Photo upload needs a real GCS bucket and Application Default
+      # Credentials; empty here, so the local stack runs and only uploads fail.
+      GCS_BUCKET: ${GCS_BUCKET:-}
       ECOTRACK_SECURITY_ENFORCE: ${ECOTRACK_SECURITY_ENFORCE:-true}
       ECOTRACK_CORS_ALLOWED_ORIGINS: ${ECOTRACK_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
       # Optional first-run admin code (TODO-36). Unset => the backend
-      # generates one and prints it to the log, which needs SSH to read.
+      # generates one and prints it to the log.
       ECOTRACK_SETUP_CODE: ${ECOTRACK_SETUP_CODE:-}
     ports:
       - "8080:8080"
@@ -77,56 +78,8 @@ services:
     networks:
       - ecotrack_network
 
-  # =========================================================================
-  # Web SPA (React/Vite) — static bundle served by its own Caddy
-  # =========================================================================
-  # Built from source on the VPS by the deploy, same as the backend. The VITE_*
-  # values are BUILD args, not runtime env: Vite inlines them into the bundle.
-  web:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-      args:
-        # Same-origin: the edge Caddy serves this SPA and proxies /api to the
-        # backend, so the browser never makes a cross-origin call.
-        VITE_DATA_MODE: ${VITE_DATA_MODE:-live}
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
-    container_name: ecotrack_web
-    restart: unless-stopped
-    networks:
-      - ecotrack_network
-
-  # =========================================================================
-  # Caddy Reverse Proxy & Automatic SSL (HTTPS)
-  # =========================================================================
-  caddy:
-    image: caddy:2.8-alpine
-    container_name: ecotrack_caddy
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-      web:
-        condition: service_started
-    environment:
-      DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - ecotrack_network
-
 volumes:
   postgres_data:
-    driver: local
-  caddy_data:
-    driver: local
-  caddy_config:
     driver: local
 
 networks:

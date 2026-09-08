@@ -330,7 +330,7 @@ public class TaskController {
         return ResponseEntity.ok(updatedTasks);
     }
 
-    // Upload photos for a task (stored in DO Spaces under "poze
+    // Upload photos for a task (stored in the GCS bucket under "poze
     // cabine/{taskId}_{clientName}/" folder)
     @PostMapping("/{id}/photos")
     public ResponseEntity<Map<String, Object>> uploadTaskPhotos(
@@ -396,7 +396,7 @@ public class TaskController {
     /**
      * The task's photos, as URLs a browser can actually load.
      *
-     * <p>Objects are PRIVATE in Spaces (TODO-46), so the URL held in
+     * <p>The bucket enforces public access prevention (TODO-46), so the URL held in
      * {@code task_photos.image_url} identifies an object but cannot fetch one.
      * What goes over the wire is a short-lived presigned link, minted per
      * request.
