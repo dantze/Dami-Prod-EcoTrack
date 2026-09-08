@@ -43,18 +43,10 @@
 @import '@mantine/core/styles/UnstyledButton.css' layer(mantine);
 @import '@mantine/core/styles/ScrollArea.css' layer(mantine);
 
-/* ModalsProvider is mounted in AppProviders. Nothing calls `modals.open` today
-   (TODO-82), but the provider is live, so its styles stay until it goes. */
-@import '@mantine/core/styles/Modal.css' layer(mantine);
-@import '@mantine/core/styles/ModalBase.css' layer(mantine);
-
 /* @mantine/dates ships no per-component CSS — one 32 kB sheet or nothing — so
    this stays whole. It is also what styles the calendar inside the DateInput
    dropdown, which is the part hardest to verify from a test. */
 @import '@mantine/dates/styles.css' layer(mantine);
-
-/* The Notifications host is mounted; toasts themselves are Sonner's. ~4 kB. */
-@import '@mantine/notifications/styles.css' layer(mantine);
 
 /**
  * EcoTrack design tokens.
