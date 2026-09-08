@@ -57,9 +57,15 @@ variable "artifact_repository_id" {
 }
 
 variable "artifact_keep_recent_count" {
-  description = "How many recent backend images to keep."
+  description = "How many recent backend images to keep. This is the backend rollback window: every merge to main pushes one."
   type        = number
-  default     = 10
+  default     = 40
+}
+
+variable "artifact_max_age" {
+  description = "Age at which a backend image is deleted regardless of the keep count. KEEP is evaluated first, so this only reaches images already outside it."
+  type        = string
+  default     = "7776000s"
 }
 
 variable "db_name" {

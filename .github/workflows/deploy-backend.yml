@@ -40,6 +40,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Records the run as a GitHub deployment, which is what puts a live
+    # "Environments" panel on the repo home page saying which commit is serving
+    # and where (TODO-98). No protection rule is attached, so this adds no click
+    # - the button already IS the confirmation. Adding required reviewers here
+    # would turn it into GitLab's `when: manual`, a run that pauses with an
+    # approve button; that is deliberately not done, because every merge would
+    # then park a pipeline waiting on someone.
+    environment:
+      name: backend
+      url: ${{ steps.deploy.outputs.url }}
+
     steps:
       # A button that silently does nothing is worse than a red run, so a
       # missing secret FAILS here rather than skipping the way the build does.

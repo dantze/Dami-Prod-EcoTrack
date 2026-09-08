@@ -31,17 +31,12 @@ unless its status says otherwise.
 
 ---
 
-## Still open — 9 of 99
+## Still open — 4 of 99
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
 - **TODO-17** `[POSTPONED]` — All other AI ideas *(F)*
-- **TODO-82** `[ ]` — Two Mantine providers are mounted and neither is ever used *(G)*
-- **TODO-83** `[ ]` — `Button`'s default variant is `secondary`, and one screen relied on it by accident *(G)*
-- **TODO-87** `[ ]` — The bundle ceiling still describes headroom over a build CI no longer makes *(G)*
-- **TODO-96** `[ ]` — Rollback reaches back further than the artifacts survive *(G)*
 - **TODO-97** `[ ]` — Nothing enforces the CI gates *(G)*
-- **TODO-98** `[ ]` — There is no "what is actually deployed" view *(G)*
 - **TODO-99** `[ ]` — About twenty shadcn primitives are imported by nothing *(G)*
 - **TODO-89** `[ ]` — What `infra/` deliberately does not do *(G)*
 
@@ -140,12 +135,12 @@ full text lives further down.
 | TODO-79 | `[DONE]` | G | The "GCP deployment" still depends on a DigitalOcean bucket |
 | TODO-80 | `[DONE]` | G | Paying for a warm instance to run two cron jobs |
 | TODO-81 | `[DONE]` | G | Both nightly jobs run on EVERY Cloud Run instance |
-| TODO-82 | **`[ ]`** | G | Two Mantine providers are mounted and neither is ever used |
-| TODO-83 | **`[ ]`** | G | `Button`'s default variant is `secondary`, and one screen relied on it by accident |
+| TODO-82 | `[DONE]` | G | Two Mantine providers are mounted and neither is ever used |
+| TODO-83 | `[DONE]` | G | `Button`'s default variant is `secondary`, and one screen relied on it by accident |
 | TODO-84 | `[DONE]` | H | The office signpost sends staff to the backend, not the web app |
 | TODO-85 | `[DONE]` | H | Cleartext HTTP is enabled app-wide, for a backend that is HTTPS-only |
 | TODO-86 | `[DONE]` | G | `python3` is gone again, so the hygiene guards ran nowhere for TODO-72/74 |
-| TODO-87 | **`[ ]`** | G | The bundle ceiling still describes headroom over a build CI no longer makes |
+| TODO-87 | `[DONE]` | G | The bundle ceiling still describes headroom over a build CI no longer makes |
 | TODO-88 | `[DONE]` | G | The cost table priced a warm instance nobody had chosen |
 | TODO-89 | **`[ ]`** | G | What `infra/` deliberately does not do |
 | TODO-90 | `[DONE]` | G | Vercel was in Terraform and bought nothing |
@@ -154,9 +149,9 @@ full text lives further down.
 | TODO-93 | `[DONE]` | G | A root `.env.example`, and a Firebase key nothing used |
 | TODO-94 | `[DONE]` | G | Revoke the orphaned Firebase API key |
 | TODO-95 | `[DONE]` | G | The deploy button rebuilt everything it deployed |
-| TODO-96 | **`[ ]`** | G | Rollback reaches back further than the artifacts survive |
+| TODO-96 | `[DONE]` | G | Rollback reaches back further than the artifacts survive |
 | TODO-97 | **`[ ]`** | G | Nothing enforces the CI gates |
-| TODO-98 | **`[ ]`** | G | There is no "what is actually deployed" view |
+| TODO-98 | `[DONE]` | G | There is no "what is actually deployed" view |
 | TODO-99 | **`[ ]`** | G | About twenty shadcn primitives are imported by nothing |
 
 ---
@@ -3381,7 +3376,7 @@ method left to run twice. Each night is one Cloud Run Job execution, `task_count
 second meaning, and it dropped to 2. `max_retries = 1` means a failed execution
 is retried once and then left failed rather than looped.
 
-### TODO-82 `[ ]` Two Mantine providers are mounted and neither is ever used
+### TODO-82 `[DONE]` Two Mantine providers are mounted and neither is ever used
 Found while doing TODO-60. `src/theme/AppProviders.tsx` mounts `ModalsProvider`
 and the `Notifications` host, and nothing in `src/` calls `modals.open` or
 `notifications.show` — verified by grep across the whole tree. Toasts are
@@ -3394,6 +3389,18 @@ for them — about 7 kB raw, under 1 kB gzip. The CSS is not the point; the poin
 is that a reader of `AppProviders` reasonably concludes the app has two toast
 systems and two modal systems.
 
+**Done, and the estimate above was wrong by 20x.** Both providers, their two
+package dependencies (`@mantine/modals`, `@mantine/notifications`) and their
+three stylesheet imports are gone. This item guessed "about 7 kB raw, under 1 kB
+gzip" by counting only the CSS; the eager bundle actually fell from **239.1 to
+219.8 kB gzip**, because a mounted provider drags its JS in too. Re-tightening
+the ceiling that measurement sits under is TODO-87, deliberately in its own
+commit.
+
+`AppProviders`'s header now states the rule positively — one modal system and
+one toast system, both shadcn's — so the next reader is not left inferring it
+from an absence.
+
 **Not folded into TODO-60** because that item was about stylesheet size and this
 is a behaviour change to the provider tree: removing a provider is the kind of
 thing that should be its own commit, and `ModalsProvider` in particular is the
@@ -3405,7 +3412,7 @@ consolidating the app's TWO confirm implementations, and whoever does that
 should decide there whether Mantine's modals are a third candidate or a dead
 end — then deleting both providers and the three CSS imports together.
 
-### TODO-83 `[ ]` `Button`'s default variant is `secondary`, and one screen relied on it by accident
+### TODO-83 `[DONE]` `Button`'s default variant is `secondary`, and one screen relied on it by accident
 Found during a browser pass over every screen (the same one that closed TODO-66
 and TODO-67). `AccessRequestsPage`'s **Aprobă** — the one action that screen
 exists for, approving a device's access — was rendered with no `variant` prop.
@@ -3431,6 +3438,24 @@ to how this repo guards its other invisible mistakes — see
 `colorTokensExist.test.ts` — but "is this a primary action" is not something a
 scan can answer, so it would have to be cruder: flag any variant-less Button and
 require an explicit `variant="secondary"` where that is the intent.
+
+**Done — the third option, and it was cheap because there were only five.**
+`components/ui/__tests__/buttonVariantIsExplicit.test.ts` fails on any `<Button>`
+under `src/features` or `src/components/layout` with no `variant`. The default
+stays: the contract is frozen, making `variant` required would touch 127 call
+sites, and the cost of the rule now lands on new code only. A scan still cannot
+answer "is this the primary action" — it insists the question was *asked*.
+
+**Writing it found a second one**, which is the argument for the rule rather
+than for review. `SubscriptionUsageModal`'s "Mută N comenzi" — the only control
+in the "Mută pe alt abonament" section and the only button in the whole modal —
+was drawing as a quiet secondary. It is `variant="primary"` now. The other four
+were genuinely secondary (a Cancel, a map picker, two steppers) and now say so.
+
+One implementation note worth keeping: the scanner tracks brace depth instead of
+matching `<Button[^>]*>`, because `icon={<MapPin aria-hidden />}` closes the tag
+early for any such pattern and would report a Button whose `variant` sits after
+the icon as missing one. There is a test for that specific false positive.
 
 ### TODO-86 `[DONE]` `python3` is gone again, so the hygiene guards ran nowhere for TODO-72/74
 TODO-68 was closed on the strength of `winget install Python.Python.3.12` having
@@ -3504,7 +3529,7 @@ Confirmed it was pre-existing rather than newly introduced by running the script
 against a `git archive` of HEAD, where it passes — the archive contains only
 tracked files, which is exactly why CI never saw it.
 
-### TODO-87 `[ ]` The bundle ceiling still describes headroom over a build CI no longer makes
+### TODO-87 `[DONE]` The bundle ceiling still describes headroom over a build CI no longer makes
 Created by TODO-55, which changed what `bundle_budget.py` is pointed at without
 changing what it allows.
 
@@ -3530,6 +3555,14 @@ than this repo has wanted so far.
 
 Whichever it is, do it in a commit that changes only the number, so the first red
 build afterwards is unambiguous.
+
+**Done — the first option, at a number the item could not have predicted.**
+TODO-82 landed first and took the eager set from 239.1 to **219.8 kB**, so
+re-tightening to "~250" would have restored 14% headroom rather than 5%. The
+ceiling is **231.0 kB**: 219.8 plus 5%, which is what it was always written to
+express. Its own instruction was followed — three separate commits (the live
+measurement in TODO-55, the provider removal in TODO-82, the number here), so a
+red build points at exactly one of them.
 
 *Found while doing TODO-55.*
 
@@ -3802,7 +3835,7 @@ project and no Vercel project exist yet.
 
 *Found while polishing `.github`.*
 
-### TODO-96 `[ ]` Rollback reaches back further than the artifacts survive
+### TODO-96 `[DONE]` Rollback reaches back further than the artifacts survive
 TODO-95 made rollback a first-class move: `image_tag` on Deploy Backend and
 `commit` on Deploy Web promote an older artifact. Nothing chose how long an
 older artifact stays promotable, and three separate retention numbers now decide
@@ -3828,6 +3861,22 @@ explicitly and exempt those tags from the cleanup policy, which is a bigger
 change to the registry module. The web artifact should then be set to match
 whatever that answer is, rather than being 30 by accident.
 
+**Done — the first answer, with all three numbers now saying the same thing.**
+`artifact_keep_recent_count` is **40** and the age rule is a new
+`artifact_max_age` variable at **90 days** (it was a hardcoded 30-day literal in
+the registry module). The web bundle's `retention-days` is **90** to match; 90
+is also GitHub's cap on a free plan, which is what set the ceiling for all three.
+
+The alignment is the point, not the individual figures. Rolling the backend to a
+commit whose web bundle has expired leaves the two halves on different code —
+and the frontend has the backend URL inlined, so "just redeploy web" means
+rebuilding, which is exactly what rollback is trying to avoid. KEEP is evaluated
+before DELETE in Artifact Registry, so the age rule only reaches images already
+outside the 40.
+
+Mobile is unchanged: EAS keeps update history indefinitely, so it was never the
+constraint.
+
 ### TODO-97 `[ ]` Nothing enforces the CI gates
 `repo-hygiene`, `ci-backend`, `ci-web`, `ci-mobile` and `ci-infra` all run on
 every pull request, and **none of them is a required check** — there is no
@@ -3848,7 +3897,7 @@ options are "required checks, direct push still allowed" (which GitHub supports:
 rulesets can require checks on the branch without requiring a PR) or the full
 PR-only flow. Pick one; the first is nearly free.
 
-### TODO-98 `[ ]` There is no "what is actually deployed" view
+### TODO-98 `[DONE]` There is no "what is actually deployed" view
 Answering "which commit is live?" means opening the Actions tab, finding the
 most recent successful Deploy Backend run, and reading its summary — and doing
 it again separately for web and mobile. There is no single place that says what
@@ -3865,6 +3914,19 @@ later", since every merge would park a pipeline waiting for approval.
 
 **Deciding it needs** nothing much; it was raised, understood and simply not
 done yet. Worth folding in the next time `.github/` is opened.
+
+**Done.** The three deploy jobs declare `environment:` — `backend` and `web`
+with the deployed URL, `mobile` without one, since an EAS channel has no address
+a browser can open. Each run is now a recorded GitHub deployment, so the repo
+home page carries a live Environments panel naming the commit and the URL, and
+there is a history behind it.
+
+**No protection rule is attached, deliberately.** Adding required reviewers
+would turn each button into GitLab's `when: manual` — a run that pauses with an
+approve button — which reads like an upgrade and is not: the button already IS
+the confirmation, and the pause model fits "every merge is a release candidate",
+not "merge for a week, then ship". Under it, every merge would park a pipeline
+waiting on someone, and those expire after 30 days.
 
 ### TODO-99 `[ ]` About twenty shadcn primitives are imported by nothing
 `src/components/shadcn/` holds the CLI's raw output, and a scan found roughly

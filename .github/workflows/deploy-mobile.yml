@@ -44,6 +44,11 @@ jobs:
     name: Ship
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
+    # Recorded as a GitHub deployment so the repo home page says what is live
+    # (TODO-98). No URL: an EAS channel has no address a browser can open.
+    environment:
+      name: mobile
     defaults:
       run:
         working-directory: mobile

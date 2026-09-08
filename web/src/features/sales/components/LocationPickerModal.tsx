@@ -574,7 +574,9 @@ function PickerBody({
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Button onClick={onCancel}>Anulează</Button>
+          <Button variant="secondary" onClick={onCancel}>
+            Anulează
+          </Button>
           <Button
             variant="primary"
             disabled={!point}

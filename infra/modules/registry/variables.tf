@@ -22,6 +22,10 @@ variable "keep_recent_count" {
   type = number
 }
 
+variable "delete_older_than" {
+  type = string
+}
+
 variable "labels" {
   type = map(string)
 }

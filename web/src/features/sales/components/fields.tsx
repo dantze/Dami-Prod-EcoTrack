@@ -263,6 +263,7 @@ export function LocationFields({
       </Col>
       <Col span={12}>
         <Button
+          variant="secondary"
           size="sm"
           icon={<MapPin aria-hidden />}
           onClick={() => setPickerOpen(true)}

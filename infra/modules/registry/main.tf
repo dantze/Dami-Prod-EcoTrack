@@ -19,7 +19,7 @@ resource "google_artifact_registry_repository" "backend" {
     action = "DELETE"
 
     condition {
-      older_than = "2592000s"
+      older_than = var.delete_older_than
     }
   }
 }

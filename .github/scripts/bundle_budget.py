@@ -94,16 +94,23 @@ STATIC_IMPORT_RE = re.compile(
 # of 247.8: `"sideEffects"` lets Rollup shake the seeded mock store out of a
 # live build, and that is 8.6 kB of it.
 #
-# So 260 kB is ~8.7% headroom over 239.1, not the ~5% over 247.8 it was written
-# to be. The ceiling was left alone on purpose: moving the measurement and the
-# limit in one change means a later red build cannot be attributed to either.
-# Whether to re-tighten it toward ~250 is TODO-87.
+# 260 kB was therefore ~8.7% headroom over 239.1, not the ~5% over 247.8 it was
+# written to express. The ceiling was left alone at the time on purpose: moving
+# the measurement and the limit together means a later red build cannot be
+# attributed to either.
 #
-# The ceiling is deliberately tighter than the old 280 because the thing it now
-# guards against is narrower: a re-introduced eager import, not the whole
-# rebuild's floor. It is NOT an invitation to drift. Raise it deliberately, in a
-# commit that says what grew and why — never to make a red build green.
-BUDGET_GZIP_KB = 260.0
+# LOWERED 260 -> 231 (TODO-87), restoring that ~5%. Two separate changes landed
+# in between and both are in the number: the live-build measurement above, and
+# TODO-82 deleting the ModalsProvider and Notifications host that nothing ever
+# filled, which took the eager set from 239.1 to **219.8 kB**. 231 is 219.8 plus
+# 5%. Each of the three moved in its own commit, so the first red build after
+# any of them points at exactly one cause.
+#
+# The ceiling is deliberately tight, because the thing it guards against is
+# narrow: a re-introduced eager import, not the whole rebuild's floor. It is NOT
+# an invitation to drift. Raise it deliberately, in a commit that says what grew
+# and why — never to make a red build green.
+BUDGET_GZIP_KB = 231.0
 
 
 def gzip_kb(path: Path) -> float:

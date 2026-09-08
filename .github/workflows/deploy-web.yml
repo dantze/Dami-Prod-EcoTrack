@@ -34,6 +34,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    # Recorded as a GitHub deployment so the repo home page says what is live
+    # (TODO-98). No protection rule: the button is already the confirmation.
+    environment:
+      name: web
+      url: ${{ steps.deploy.outputs.url }}
+
     env:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}

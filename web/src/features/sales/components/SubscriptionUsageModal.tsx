@@ -99,6 +99,7 @@ export function SubscriptionUsageModal({
                   />
                 </div>
                 <Button
+                  variant="primary"
                   onClick={() =>
                     targetId !== null &&
                     onMoveOrders(

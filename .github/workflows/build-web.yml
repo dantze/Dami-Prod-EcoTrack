@@ -130,13 +130,18 @@ jobs:
 
       # `.vercel/output` IS the deployable artifact - `vercel deploy --prebuilt`
       # uploads exactly this and runs no build of its own.
+      #
+      # 90 days is the web rollback window, and it is set to match the backend's
+      # (`artifact_max_age` in infra/): rolling one side back to a commit whose
+      # other half has expired is the failure this avoids. GitHub caps free-plan
+      # retention at 90 days.
       - name: Upload the bundle
         if: steps.check.outputs.configured == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: web-bundle-${{ github.sha }}
           path: .vercel/output
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: error
 
       - name: Summary

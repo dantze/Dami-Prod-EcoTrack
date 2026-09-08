@@ -768,13 +768,19 @@ function RidicareFields({
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <Button size="sm" disabled={chosen === 0} onClick={() => step(group, -1)}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={chosen === 0}
+                        onClick={() => step(group, -1)}
+                      >
                         −
                       </Button>
                       <span className="w-8 text-center text-sm tabular">
                         {chosen > 0 ? `-${chosen}` : '0'}
                       </span>
                       <Button
+                        variant="secondary"
                         size="sm"
                         disabled={chosen >= group.availableCount}
                         onClick={() => step(group, 1)}

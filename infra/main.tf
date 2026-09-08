@@ -75,6 +75,7 @@ module "registry" {
   repository_id     = var.artifact_repository_id
   image_name        = var.backend_service_name
   keep_recent_count = var.artifact_keep_recent_count
+  delete_older_than = var.artifact_max_age
   labels            = local.labels
   description       = "Docker images for the ${var.project_name} Spring Boot backend"
 
