@@ -1,7 +1,7 @@
 plugins {
 	id 'java'
 	id 'jacoco'
-	id 'org.springframework.boot' version '3.5.7'
+	id 'org.springframework.boot' version '3.5.16'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -41,7 +41,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	// Task photos live in a GCS bucket. No key: on Cloud Run the SDK picks up
 	// the runtime service account through ADC (TODO-79).
-	implementation platform('com.google.cloud:libraries-bom:26.50.0')
+	implementation platform('com.google.cloud:libraries-bom:26.88.0')
 	implementation 'com.google.cloud:google-cloud-storage'
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.h2database:h2'
