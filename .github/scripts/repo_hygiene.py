@@ -27,7 +27,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-ALLOW_FILE = REPO_ROOT / ".github" / "repo-hygiene-allow.txt"
+# Findings this scanner is RIGHT about but that must stay, as (path, check-name).
+# Empty since TODO-93 removed the Firebase config that was the only entry - the
+# app never used Firebase. Add one only with a reason, and delete it the moment
+# it stops being true.
+ALLOWED_FINDINGS: set[tuple[str, str]] = set()
 
 # Top-level entries that legitimately have no CI workflow watching them.
 # Anything NOT here and NOT matched by a CI `paths:` filter fails check 2 —
@@ -42,7 +46,6 @@ NO_CI_REQUIRED = {
     # lock file records which versions were installed.
     ".agents",
     "skills-lock.json",
-    "deploy",           # documentation-only systemd unit + README
     "CLAUDE.md",
     "README.md",
     # The backlog. Prose, and it ships in no build - but "no CI workflow"
@@ -53,18 +56,15 @@ NO_CI_REQUIRED = {
     # requirement because it is covered by a check with no `paths:` filter.
     "TODO.md",
     "DEPLOYMENT.md",    # the runbook; prose, ships in no build
-    ".env.example",     # a template of NAMES only; read by nothing at build time
     # docker-compose.yml is still load-bearing, as the only way to run the
     # backend against real Postgres locally (it stopped being a deployment in
     # TODO-71 and lost its web + Caddy half in TODO-91), and no ci-*.yml
     # validates it, because repo-hygiene.yml does instead. Its
-    # "Validate compose files" step runs
-    # `docker compose config -q` on every docker-compose*.yml on every PR, twice:
-    # once on the `:-` defaults and once with --env-file .env.example. That
-    # resolves interpolation and validates the Compose schema, not just the YAML
-    # (TODO-29). It is exempt from the ci-*.yml requirement because it is
-    # covered - by a check that has no `paths:` filter, which is stronger than a
-    # fourth ci-*.yml would have been.
+    # "Validate compose files" step runs `docker compose config -q` on every
+    # docker-compose*.yml on every PR, which resolves interpolation and
+    # validates the Compose schema, not just the YAML (TODO-29). It is exempt
+    # from the ci-*.yml requirement because it is covered - by a check with no
+    # `paths:` filter, which is stronger than a fourth ci-*.yml would have been.
     "docker-compose.yml",
 }
 NO_CI_REQUIRED_GLOBS = ("HANDOFF-*.md",)
@@ -104,21 +104,6 @@ def annotate(level: str, path: str, message: str, line: int | None = None) -> No
     (errors if level == "error" else warnings).append(f"`{path}` — {message}")
 
 
-def load_allowlist() -> set[tuple[str, str]]:
-    """`path<TAB or space>check-name  # reason` per line. Blank/# lines ignored."""
-    allowed: set[tuple[str, str]] = set()
-    if not ALLOW_FILE.exists():
-        return allowed
-    for raw in ALLOW_FILE.read_text(encoding="utf-8").splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line:
-            continue
-        parts = line.split()
-        if len(parts) >= 2:
-            allowed.add((parts[0], parts[1]))
-    return allowed
-
-
 def workflow_path_filters() -> dict[str, list[str]]:
     """The `paths:` filters of every ci-*.yml, so we know what CI actually watches."""
     try:
@@ -155,6 +140,12 @@ def path_matches(path: str, pattern: str) -> bool:
 
 def check_secret_filenames(changed: list[str], allowed: set[tuple[str, str]]) -> None:
     for path in changed:
+        # DELETING one of these is the fix, not the offence. `git diff
+        # --name-only` lists a removal like any other change, so without this the
+        # scanner fails the PR that takes a credential OUT of the repo
+        # (found removing mobile/google-services.json, TODO-93).
+        if not (REPO_ROOT / path).exists():
+            continue
         name = os.path.basename(path)
         if name in SECRET_FILENAME_EXCEPTIONS:
             continue
@@ -193,8 +184,8 @@ def check_secret_contents(changed: list[str], allowed: set[tuple[str, str]]) -> 
                     annotate(
                         "error", path,
                         f"contains something shaped like a live credential ({name}). "
-                        "Rotate it and remove it. If it is a known-dead value that has "
-                        "to stay, add it to .github/repo-hygiene-allow.txt with a reason.",
+                        "Rotate it and remove it. If it genuinely has to stay, add it to "
+                        "ALLOWED_FINDINGS at the top of this script, with a reason.",
                         line=lineno,
                     )
 
@@ -282,10 +273,8 @@ def main() -> int:
     with source as handle:
         changed = [line.strip() for line in handle if line.strip()]
 
-    allowed = load_allowlist()
-
-    check_secret_filenames(changed, allowed)
-    check_secret_contents(changed, allowed)
+    check_secret_filenames(changed, ALLOWED_FINDINGS)
+    check_secret_contents(changed, ALLOWED_FINDINGS)
     check_ci_coverage(changed)
     check_action_pins()
 

@@ -1,0 +1,129 @@
+name: Deploy Backend
+
+# THE BUTTON. It builds nothing and tests nothing - Build Backend already did
+# both on merge. This only points Cloud Run at an image that already exists in
+# Artifact Registry, so it takes about a minute.
+#
+# It refuses if the image is not there. That is the whole safety property: you
+# cannot deploy a commit that was never built and never passed CI.
+#
+# `image_tag` also makes rollback trivial - paste an older `sha-…` and Cloud Run
+# swaps back to it.
+#
+# SECRETS: GCP_CREDENTIALS_JSON, GCP_PROJECT_ID
+# VARIABLES: GCP_REGION, RESOURCE_PREFIX
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to promote. Blank = the image built for this commit.'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_REGION: ${{ vars.GCP_REGION || 'europe-west1' }}
+  RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX || 'ecotrack-dev' }}
+
+jobs:
+  promote:
+    name: Promote to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # A button that silently does nothing is worse than a red run, so a
+      # missing secret FAILS here rather than skipping the way the build does.
+      - name: Require deploy credentials
+        run: |
+          MISSING=""
+          [ -n '${{ secrets.GCP_CREDENTIALS_JSON }}' ] || MISSING="$MISSING GCP_CREDENTIALS_JSON"
+          [ -n '${{ secrets.GCP_PROJECT_ID }}' ]       || MISSING="$MISSING GCP_PROJECT_ID"
+          if [ -n "$MISSING" ]; then
+            echo "::error title=Not configured::Missing repository secrets:$MISSING. See DEPLOYMENT.md."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Resolve the image, and prove it exists
+        id: image
+        run: |
+          TAG='${{ inputs.image_tag }}'
+          [ -n "$TAG" ] || TAG="sha-${GITHUB_SHA}"
+          REPO="${GCP_REGION}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${RESOURCE_PREFIX}-backend/backend"
+
+          if ! gcloud artifacts docker images describe "${REPO}:${TAG}" >/dev/null 2>&1; then
+            echo "::error title=No such image::${REPO}:${TAG} is not in Artifact Registry. Merge the commit so Build Backend publishes it, or pass an image_tag that exists."
+            exit 1
+          fi
+
+          echo "ref=${REPO}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "service=${RESOURCE_PREFIX}-backend" >> "$GITHUB_OUTPUT"
+          echo "jobs=${RESOURCE_PREFIX}-generate-tasks ${RESOURCE_PREFIX}-prune-sessions" >> "$GITHUB_OUTPUT"
+          echo "Promoting ${REPO}:${TAG}"
+
+      - name: Deploy the service
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ steps.image.outputs.service }}
+          region: ${{ env.GCP_REGION }}
+          image: ${{ steps.image.outputs.ref }}
+
+      # The nightly jobs run the SAME image and Terraform ignores all three
+      # image fields, so this is the only thing that moves them forward. A job
+      # left behind fails at 02:00, where nobody is looking.
+      - name: Roll the nightly jobs onto the same image
+        run: |
+          for JOB in ${{ steps.image.outputs.jobs }}; do
+            gcloud run jobs update "$JOB" \
+              --image '${{ steps.image.outputs.ref }}' \
+              --region "${GCP_REGION}" --quiet
+          done
+
+      - name: Smoke test the public URL
+        run: |
+          URL='${{ steps.deploy.outputs.url }}'
+          echo "Probing ${URL}/actuator/health"
+          for i in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' "${URL}/actuator/health" || echo 000)
+            if [ "$CODE" = "200" ]; then
+              echo "Backend healthy after $((i * 5))s"
+              exit 0
+            fi
+            echo "  attempt $i/20 -> HTTP $CODE"
+            sleep 5
+          done
+          echo "Backend never returned 200. Recent logs:"
+          gcloud run services logs read '${{ steps.image.outputs.service }}' \
+            --region "${GCP_REGION}" --limit 50 || true
+          exit 1
+
+      - name: Summary
+        run: |
+          {
+            echo "### Backend live"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| URL | ${{ steps.deploy.outputs.url }} |"
+            echo "| Image | \`${{ steps.image.outputs.ref }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

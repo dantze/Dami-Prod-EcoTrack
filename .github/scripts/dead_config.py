@@ -2,11 +2,10 @@
 """`ecotrack.*` properties that nothing reads.
 
 Config outlives the feature it configured. When Google sign-in was removed, its
-settings stayed behind in four files — application.properties, .env.example,
-docker-compose.yml and deploy.yml — plus two GitHub repository secrets. Nothing
-broke, which is exactly the problem: the next person to read `.env.example`
-concludes Google sign-in is supported, and the secrets sit there as credentials
-nothing uses.
+settings stayed behind in application.properties, docker-compose.yml and the
+deploy workflows - plus two GitHub repository secrets. Nothing broke, which is
+exactly the problem: the next person to read the config concludes Google sign-in
+is supported, and the secrets sit there as credentials nothing uses.
 
 Only `ecotrack.*` keys are checked. `spring.*`, `server.*` and friends are read
 by the framework, not by our code, so absence from our sources means nothing.
@@ -32,9 +31,9 @@ JAVA_ROOT = ROOT / "backend/src/main/java"
 # Where a stale key tends to have siblings. Reported alongside the dead key so
 # the cleanup is one pass rather than four discoveries.
 COMPANION_FILES = [
-    ".env.example",
     "docker-compose.yml",
-    ".github/workflows/deploy.yml",
+    ".github/workflows/deploy-backend.yml",
+    ".github/workflows/deploy-web.yml",
     ".github/workflows/deploy-mobile.yml",
     # Where an ecotrack.* key reaches PRODUCTION since TODO-71: main.tf sets the
     # container's env and the secret-backed ones, and the tfvars template is

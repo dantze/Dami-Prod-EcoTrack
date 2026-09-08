@@ -11,10 +11,11 @@
  * a bare ordered array of ids — and is applied optimistically so the list never
  * snaps back while the request is in flight.
  *
- * Above the stop list sits the one local suggestion left in `./grouping.ts`:
- * a shorter stop order. It is a proposal with its numbers on show — nothing is
- * reordered until the dispatcher accepts. (The "Grupare sugerată" card that
- * proposed unassigned jobs for the route was removed — TODO-16.)
+ * **The board suggests nothing.** Both heuristics that used to sit above the
+ * stop list — "Grupare sugerată" (unassigned jobs proposed for the route) and
+ * "Ordine mai scurtă a opririlor" (a shorter stop sequence) — are gone, with
+ * the code behind them (TODO-16). Work reaches a route by being dragged there
+ * and is ordered by the dispatcher, never proposed.
  *
  * `?ruta=<id>` selects a route and `?nou=1` opens the create form, which is how
  * the command palette (⌘K) lands here.
@@ -111,7 +112,6 @@ import {
   usePlacement,
 } from './components/placement';
 import { DriverPickerModal, RoutePickerModal } from './components/pickers';
-import { DispatchSuggestions } from './components/suggestions';
 
 type BoardPane = 'routes' | 'stops' | 'pool';
 
@@ -714,20 +714,6 @@ function RoutesScreen() {
                 )
               }
             />
-
-            {selectedRoute && !routeTasksQuery.isPending && (
-              <DispatchSuggestions
-                route={selectedRoute}
-                routeTasks={routeTasks}
-                busy={reorderTasks.isPending}
-                onApplyOrder={(orderedIds) =>
-                  reorderTasks.mutate(orderedIds, {
-                    onSuccess: () => toast.success('Ordinea opririlor a fost actualizată.'),
-                    onError: (error) => toast.error(errorMessage(error)),
-                  })
-                }
-              />
-            )}
 
             {selectedRoute && <HeldTray onCancel={placement.clear} />}
 

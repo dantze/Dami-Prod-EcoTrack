@@ -1,26 +1,19 @@
 name: Deploy Mobile
 
-# Two different things ship the mobile app, and the difference matters:
+# THE BUTTON. Its default action bundles nothing and tests nothing: Build Mobile
+# already published the update to the **staging** EAS branch on merge, and this
+# republishes that same update onto **production**, which is the channel
+# installed phones follow. Seconds, and byte-identical to what was tested.
 #
-#   OTA update (`eas update`) — automatic on every push to main that touches
-#     mobile/. Ships JS + assets to already-installed apps in seconds, no store
-#     review. This is the day-to-day delivery path.
+# The two native actions are the deliberate exception. A store binary cannot be
+# "already built" by a bundler - `eas build` compiles native code, takes ~20
+# minutes and is followed by a store review. They are here because they are
+# rare: a new native module, an SDK bump, a plugin/permission change, or an
+# expo.version bump. An OTA cannot carry any of those.
 #
-#   Native build (`eas build`) — manual, via "Run workflow". Needed whenever
-#     the NATIVE layer changes: a new native module, an SDK bump, anything in
-#     app.config.js's plugins/permissions, or a version bump. An OTA cannot
-#     carry those; pushing one that assumes them crashes the old binary.
-#
-# runtimeVersion policy is "appVersion", so an OTA only reaches installs whose
-# expo.version matches. Bumping expo.version therefore fences off old installs
-# until they get a new build — which is the safe default, not a bug.
-#
-# EXPO_PUBLIC_* travels on the OTA path, which is easy to get backwards
-# (TODO-72). Those variables are inlined by the BUNDLER, not baked into the
-# native binary, and `eas update` runs the bundler — so an update DOES repoint
-# an installed app at a different backend. That is why the step below refuses
-# to ship without one, and why redirecting the field off the retired droplet
-# needs no store release.
+# runtimeVersion is `appVersion`, so an OTA only reaches installs whose
+# expo.version matches. Bumping it fences off old installs until they get a new
+# binary - the safe default, not a bug.
 
 on:
   workflow_dispatch:
@@ -28,23 +21,12 @@ on:
       action:
         description: 'What to ship'
         required: true
-        default: 'update'
+        default: 'promote'
         type: choice
         options:
-          - update          # OTA to installed apps
-          - build-preview   # internal APK
-          - build-production # Play Store app bundle
-      branch:
-        description: 'EAS channel/branch (update only)'
-        required: false
-        default: 'production'
-        type: string
-
-  push:
-    branches: [main]
-    paths:
-      - 'mobile/**'
-      - '.github/workflows/deploy-mobile.yml'
+          - promote          # staging -> production, no rebuild
+          - build-preview    # internal APK (compiles)
+          - build-production # Play Store app bundle (compiles)
 
 concurrency:
   group: deploy-mobile
@@ -53,29 +35,32 @@ concurrency:
 permissions:
   contents: read
 
-jobs:
-  # Same gate as the other deploys: lint + typecheck + tests on a clean runner
-  # for this exact commit, before anything reaches a device.
-  verify:
-    name: Verify
-    uses: ./.github/workflows/ci-mobile.yml
+env:
+  STAGING_BRANCH: staging
+  PRODUCTION_BRANCH: production
 
+jobs:
   ship:
     name: Ship
-    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
       run:
         working-directory: mobile
+
     steps:
+      - name: Require an EAS token
+        working-directory: .
+        run: |
+          if [ -z '${{ secrets.EXPO_TOKEN }}' ]; then
+            echo "::error title=Not configured::EXPO_TOKEN is not set. See DEPLOYMENT.md."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          # Single source of truth for the toolchain version, shared with
-          # developers' shells (TODO-48). Hardcoding it here let CI sit on 22
-          # while a contributor ran 24, where the suite failed.
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: mobile/package-lock.json
@@ -87,78 +72,56 @@ jobs:
 
       - run: npm ci
 
-      # EXPO_PUBLIC_* is inlined by the BUNDLER, and `eas update` bundles — so
-      # the value below is not merely this job's configuration, it is what every
-      # installed phone will call after the update lands. Unset, GitHub
-      # interpolates an empty string, constants/ApiConfig.ts falls back to
-      # localhost, and the OTA quietly bricks the fleet: a phone's localhost is
-      # the phone. Nothing downstream would fail — `eas update` succeeds, the
-      # job goes green, and the breakage shows up as drivers reporting the app
-      # "not loading".
-      #
-      # This is also the step that makes TODO-72's cutover possible in the first
-      # place: pointing the field at Cloud Run IS setting this variable and
-      # shipping an update, and it must not be possible to do half of that.
+      # No bundler runs here, so EXPO_PUBLIC_* is irrelevant: the update being
+      # moved was bundled by Build Mobile, against the URL that was set then.
+      - name: Promote staging to production
+        if: inputs.action == 'promote'
+        run: |
+          eas update:republish \
+            --branch "${STAGING_BRANCH}" \
+            --destination-branch "${PRODUCTION_BRANCH}" \
+            --non-interactive
+
+      # The native paths DO bundle, so they need the variables Build Mobile
+      # checks. Same guard, because a binary shipped against localhost is worse
+      # than an OTA: it needs a store release to correct.
       - name: Require a backend URL
+        if: inputs.action != 'promote'
         env:
           EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
-          EXPO_PUBLIC_WEB_APP_URL: ${{ vars.EXPO_PUBLIC_WEB_APP_URL }}
         run: |
           if [ -z "${EXPO_PUBLIC_API_BASE_URL// /}" ]; then
-            echo "::error::EXPO_PUBLIC_API_BASE_URL is not set (Settings → Secrets and variables → Actions → Variables)."
-            echo "Every shipped bundle inlines it. Without it the app calls http://localhost:8080/api,"
-            echo "which on a phone is the phone. Set it to Terraform's backend_api_base_url output + /api."
+            echo "::error::EXPO_PUBLIC_API_BASE_URL is not set. A binary built without it calls http://localhost:8080/api, which on a phone is the phone — and only a store release can fix that."
             exit 1
           fi
           case "$EXPO_PUBLIC_API_BASE_URL" in
             */api|*/api/) ;;
-            *) echo "::error::EXPO_PUBLIC_API_BASE_URL must end in /api — every path in services/http.ts is appended to it."
-               exit 1 ;;
+            *) echo "::error::EXPO_PUBLIC_API_BASE_URL must end in /api."; exit 1 ;;
           esac
-          echo "Shipping against ${EXPO_PUBLIC_API_BASE_URL}"
-
-          # A WARNING, not an error, and the asymmetry is deliberate (TODO-84).
-          # No backend URL means nothing in the app works; no web-app URL means
-          # one signpost screen, seen only by office staff who are not supposed
-          # to be using this app, says it does not know the address instead of
-          # showing a button. Degraded, not broken — and failing the whole
-          # driver deploy over it would be the wrong trade. There is no
-          # fallback on purpose: the address used to be computed from the API
-          # base, which named the backend once the SPA moved to Vercel.
-          if [ -z "${EXPO_PUBLIC_WEB_APP_URL// /}" ]; then
-            echo "::warning::EXPO_PUBLIC_WEB_APP_URL is not set — app/office.tsx will tell office staff it does not know the web app's address. Set it to Terraform's frontend_url output."
-          else
-            echo "Office signpost points at ${EXPO_PUBLIC_WEB_APP_URL}"
-          fi
-
-      # A push to main always takes the OTA path. The build paths are manual
-      # only — they cost EAS build minutes and, for production, a store review.
-      - name: Publish OTA update
-        if: github.event_name == 'push' || inputs.action == 'update'
-        env:
-          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
-          EXPO_PUBLIC_WEB_APP_URL: ${{ vars.EXPO_PUBLIC_WEB_APP_URL }}
-          # Via env, never inlined into the run script: a commit message is
-          # attacker-controllable text and `${{ }}` splices it in before the
-          # shell ever sees it, which is a command-injection hole.
-          UPDATE_BRANCH: ${{ inputs.branch || 'production' }}
-          UPDATE_MESSAGE: ${{ github.event.head_commit.message || github.sha }}
-        run: |
-          eas update \
-            --branch "$UPDATE_BRANCH" \
-            --message "$UPDATE_MESSAGE" \
-            --non-interactive
 
       - name: Build preview APK
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'build-preview'
+        if: inputs.action == 'build-preview'
         env:
           EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
           EXPO_PUBLIC_WEB_APP_URL: ${{ vars.EXPO_PUBLIC_WEB_APP_URL }}
         run: eas build --platform android --profile preview --non-interactive --no-wait
 
       - name: Build production app bundle
-        if: github.event_name == 'workflow_dispatch' && inputs.action == 'build-production'
+        if: inputs.action == 'build-production'
         env:
           EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
           EXPO_PUBLIC_WEB_APP_URL: ${{ vars.EXPO_PUBLIC_WEB_APP_URL }}
         run: eas build --platform android --profile production --non-interactive --no-wait
+
+      - name: Summary
+        working-directory: .
+        run: |
+          {
+            echo "### Mobile — ${{ inputs.action }}"
+            echo ""
+            if [ '${{ inputs.action }}' = 'promote' ]; then
+              echo "The \`${STAGING_BRANCH}\` update is now on \`${PRODUCTION_BRANCH}\`. Phones pick it up on next launch."
+            else
+              echo "An EAS build was queued (\`--no-wait\`). Watch it at https://expo.dev."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

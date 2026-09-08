@@ -1,0 +1,107 @@
+name: Build Backend
+
+# Runs on every merge to main that touches backend/. Tests, then builds the
+# image and pushes it to Artifact Registry tagged with the commit.
+#
+# It DEPLOYS NOTHING. Deploy Backend is the button that puts one of these images
+# in front of users, and it only ever picks a tag that already exists here - so
+# by the time you press it, the artifact is built and tested and the button is
+# a one-minute revision swap.
+#
+# Missing secrets SKIP green: this fires automatically, and a commit is not
+# wrong just because there is nowhere to push yet.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'shared/**'
+      - '.github/workflows/build-backend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-backend-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_REGION: ${{ vars.GCP_REGION || 'europe-west1' }}
+  RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX || 'ecotrack-dev' }}
+
+jobs:
+  verify:
+    name: Verify
+    uses: ./.github/workflows/ci-backend.yml
+
+  image:
+    name: Build and publish image
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Are the cloud secrets present?
+        id: check
+        run: |
+          if [ -n '${{ secrets.GCP_CREDENTIALS_JSON }}' ] && [ -n '${{ secrets.GCP_PROJECT_ID }}' ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=No registry yet::GCP secrets are unset, so there is nowhere to publish. Tests still ran."
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        if: steps.check.outputs.configured == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
+
+      - name: Set up gcloud
+        if: steps.check.outputs.configured == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for Artifact Registry
+        if: steps.check.outputs.configured == 'true'
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Set up Buildx
+        if: steps.check.outputs.configured == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      # The commit tag is the contract with the deploy button: it looks for
+      # exactly `sha-<12>` and refuses if it is not there. `latest` is a
+      # convenience for a human reading the registry, nothing depends on it.
+      - name: Build and push
+        if: steps.check.outputs.configured == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.RESOURCE_PREFIX }}-backend/backend:sha-${{ github.sha }}
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.RESOURCE_PREFIX }}-backend/backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+
+      - name: Summary
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          {
+            echo "### Backend image published"
+            echo ""
+            echo "Tag: \`sha-${GITHUB_SHA}\`"
+            echo ""
+            echo "Nothing is deployed. Run **Deploy Backend** to put it live."
+          } >> "$GITHUB_STEP_SUMMARY"

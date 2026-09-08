@@ -1,12 +1,11 @@
 name: Repo Hygiene
 
-# NO `paths:` FILTER, ON PURPOSE.
+# Stage 0 of the PR gate: runs on EVERY pull request, with no `paths:` filter.
 #
-# ci-backend / ci-web / ci-mobile are each path-filtered, and that filtering is
-# load-bearing (CLAUDE.md: it is why three independently deployed projects can
-# share one repo). The cost is that a change outside all three filters gets no
-# CI whatsoever. This workflow is the floor under that: it runs on every pull
-# request, whatever changed.
+# That is the whole point. The per-project ci-*.yml filters mean a change
+# outside all of them would otherwise get no CI at all; this is the floor under
+# that. It is also the only check covering TODO.md, the docs and compose.
+
 on:
   pull_request:
   push:
@@ -65,16 +64,9 @@ jobs:
       - name: Hygiene checks
         run: python3 .github/scripts/repo_hygiene.py --changed-files changed.txt
 
-      # The four cross-cutting checks below all belong here rather than in a
-      # per-project CI file: each compares facts across projects, or between
-      # code and prose, so running them under a `paths:` filter would mean a
-      # PR touching one side never checks it against the other. The fourth
-      # compares prose with prose inside one file — TODO.md's hand-maintained
-      # index against the items it claims to list — and a `paths:` filter is
-      # exactly what would miss a stale index (TODO-50).
-      #
-      # `if: always()` so one failure does not hide the others — a PR that
-      # broke two of them should learn about both in one run.
+      # These four compare facts ACROSS projects, or code against prose, so a
+      # `paths:` filter would mean a PR touching one side never checks the
+      # other. `if: always()` so one failure does not hide the rest.
       - name: Cross-project invariants
         if: always()
         run: python3 .github/scripts/cross_project_invariants.py
@@ -101,28 +93,12 @@ jobs:
           done
           echo "All workflow files parse."
 
-      # Compose files are deploy surface that no ci-*.yml `paths:` filter covers,
-      # so this step is the only thing standing between a typo in
-      # docker-compose.yml and a failed production deploy — deploy.yml rebuilds
-      # the whole stack from it on the VPS. It is also what justifies their
-      # NO_CI_REQUIRED entry in repo_hygiene.py: they ARE checked, here.
-      #
-      # `config -q` rather than a YAML parse (TODO-29). Parsing only proves the
-      # bytes are YAML. `config -q` additionally resolves ${VAR} interpolation
-      # and validates against the Compose schema, which is what catches the
-      # mistakes that actually reach the VPS: an unknown key
-      # (`containerr_name`), a `depends_on`/`volumes:`/`networks:` reference to
-      # something never declared, and a `${VAR?...}` required variable with no
-      # value. It does NOT check enum values — `restart: unless-stoppped` still
-      # passes — so this is a floor, not a proof.
-      #
-      # Two passes, and they check different things:
-      #   1. no env file — every ${VAR} falls back to its `:-default`, which is
-      #      how a developer runs the stack from a clean checkout;
-      #   2. --env-file .env.example — pins that the committed template is
-      #      actually sufficient to bring the stack up. A new required variable
-      #      that nobody added to the template fails here rather than on the VPS.
-      # docker and the compose plugin are preinstalled on ubuntu-latest.
+      # No ci-*.yml watches compose, so this is its only check — which justifies
+      # its NO_CI_REQUIRED entry in repo_hygiene.py. `config -q` rather than a
+      # YAML parse (TODO-29): it also resolves ${VAR} and validates the Compose
+      # schema, catching an unknown key or a reference to something never
+      # declared. Every value has a `:-` default, so one pass is the whole check
+      # since TODO-93 removed .env.example.
       - name: Validate compose files
         if: always()
         run: |
@@ -130,9 +106,7 @@ jobs:
           for f in docker-compose*.yml; do
             [ -e "$f" ] || continue
             docker compose -f "$f" config -q \
-              || { echo "::error file=$f::invalid compose file (defaults)"; status=1; }
-            docker compose --env-file .env.example -f "$f" config -q \
-              || { echo "::error file=$f::invalid compose file (with .env.example)"; status=1; }
+              || { echo "::error file=$f::invalid compose file"; status=1; }
           done
           if [ "$status" -eq 0 ]; then
             echo "All compose files validate."

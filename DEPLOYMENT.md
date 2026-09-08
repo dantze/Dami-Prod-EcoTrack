@@ -2,8 +2,8 @@
 
 Backend on **Cloud Run**, database on **Cloud SQL** (PostgreSQL), task photos in
 **Cloud Storage**, frontend on **Vercel**. The GCP half is described by Terraform in `infra/`; the Vercel
-project is created by hand and `deploy.yml` writes its two build-time variables
-on every deploy.
+project is created by hand and `build-web.yml` writes its two build-time
+variables on every build.
 
 > **This replaced a single DigitalOcean droplet** running backend + web +
 > Postgres + Caddy as one `docker compose` stack. That droplet is gone, and the
@@ -13,23 +13,48 @@ on every deploy.
 
 ## Triggers
 
-| Change | Do this | Result |
+**Merging never deploys, and the button never builds.** Two phases:
+
+**On merge to main, automatically** — the artifact is produced and parked where
+no user can reach it:
+
+| Workflow | Runs | Parks it |
 |---|---|---|
-| `backend/**`, `web/**`, `shared/**` or `infra/**` | merge to `main` | Terraform applies, backend image ships to Cloud Run, Vercel rebuilds |
-| `mobile/**` (JS only) | merge to `main` | OTA — apps update on next launch |
-| `mobile/**` (native) | Actions → Deploy Mobile → `build-production` | Play Store bundle |
+| `build-backend` | `ci-backend` → docker build | Artifact Registry, tag `sha-<commit>` |
+| `build-web` | `ci-web` → `vercel build` | GitHub artifact `web-bundle-<commit>` |
+| `build-mobile` | `ci-mobile` → `eas update` | EAS branch **`staging`** (no phone follows it) |
 
-All gated on CI. Red tests = no deploy.
+**When you decide, Actions → Run workflow** — the button promotes what is
+already there:
 
-> **The deploy skips itself until the cloud secrets exist.** The first job,
-> *Check cloud credentials*, looks for `GCP_CREDENTIALS_JSON`, `GCP_PROJECT_ID`,
-> `VERCEL_API_TOKEN` and `VERCEL_ORG_ID`; if any is missing it posts a notice and
-> every later job is skipped. The run is **green** — nothing is wrong with the
-> commit, there is just nowhere to deploy to yet. Add the secrets and the same
-> workflow starts deploying with no edit.
+| Button | Does | Takes |
+|---|---|---|
+| **Deploy Backend** | points Cloud Run service + both jobs at `sha-<commit>`, smoke-tests | ~1 min |
+| **Deploy Web** | downloads the bundle, `vercel deploy --prebuilt --prod` | ~1 min |
+| **Deploy Mobile** | `eas update:republish` staging → production | seconds |
 
-Native = new native module, SDK bump, plugin/permission change, or `expo.version`
-bump. An OTA cannot carry those.
+No button runs a test suite or a compiler, because the build already did both.
+**A deploy refuses if the artifact is missing** — you cannot ship a commit that
+was never built. **A missing secret fails a deploy** loudly; a *build* only
+skips, because it is automatic and a red main would be wrong.
+
+Rollback is the same button: `image_tag` on Deploy Backend and `commit` on
+Deploy Web take any older artifact.
+
+**Native mobile is the exception.** `eas build` compiles native code, so the
+`build-preview` and `build-production` actions on Deploy Mobile genuinely build
+(~20 min) and then need a store review. Use them only for a new native module,
+an SDK bump, a plugin/permission change, or an `expo.version` bump.
+
+Infrastructure is not a button: `terraform apply` is run from a laptop while
+state is a local file (TODO-92). `ci-infra.yml` still gates every PR touching
+`infra/`.
+
+**Order matters in one case only.** The web bundle has the backend URL inlined,
+and `build-web` reads it from Cloud Run — so the backend must exist before web
+can be *built*, not before it is deployed. A Cloud Run URL is stable across
+redeploys, so after the first time the two are independent. `build-web` refuses
+if the service is missing rather than producing a bundle that talks to nothing.
 
 ## The shape, and the one thing it changed
 
@@ -82,8 +107,11 @@ Vercel token in the blast radius of every `terraform apply`. Import the repo, or
 | Output directory | `dist` |
 | Ignored build step | `git diff --quiet HEAD^ HEAD -- web shared` |
 
-Leave the environment variables alone: `deploy.yml` writes `VITE_API_BASE_URL`
-and `VITE_DATA_MODE` before each build, and overwrites whatever is there. Note
+Leave the environment variables alone: `build-web.yml` writes
+`VITE_API_BASE_URL` and `VITE_DATA_MODE` before each build, and overwrites
+whatever is there. **Do not connect the project to GitHub** — a Git-connected
+Vercel project deploys on its own push webhook, which puts `main` in production
+without anyone pressing the button. Note
 the project **name** — it has to match the `VERCEL_PROJECT_NAME` variable below,
 because that is what the backend's allowed CORS origins are computed from — and
 the project **id**, which is the `VERCEL_PROJECT_ID` secret.
@@ -186,6 +214,7 @@ container has an identity, and the bucket's IAM policy names it.
 
 ```
 GCP_REGION=europe-west1        VERCEL_PROJECT_NAME=ecotrack-web
+RESOURCE_PREFIX=ecotrack-dev   # must equal project_name + "-" + environment in infra/
 EXPO_PUBLIC_API_BASE_URL=      # the Cloud Run URL + /api — see below
 EXPO_PUBLIC_WEB_APP_URL=       # the Vercel URL — `terraform output -raw frontend_url`
 ```
@@ -249,7 +278,7 @@ gcloud iam service-accounts add-iam-policy-binding \
 
 Keep the `--attribute-condition`: without it, **any** GitHub repository can mint
 tokens for your service account. Then swap the two commented lines in
-`deploy.yml`'s auth step for `credentials_json`.
+the deploy workflows' auth step for `credentials_json`.
 
 **6. Mobile.** Set the `EXPO_PUBLIC_API_BASE_URL` **variable** to
 `terraform output -raw backend_api_base_url` plus `/api`, then run Deploy Mobile.
@@ -390,13 +419,14 @@ what production runs and what H2 is not. `ddl-auto=update` with no migration
 tool makes that gap worth closing before anything schema-shaped ships.
 
 ```bash
-cp .env.example .env     # set DB_PASS
 docker compose up -d --build
 cd web && VITE_DATA_MODE=live VITE_API_BASE_URL=http://localhost:8080/api npm run dev
 ```
 
-That needs `ECOTRACK_CORS_ALLOWED_ORIGINS` to include `http://localhost:5173`,
-which `.env.example` sets.
+Every compose value has a default, so there is no `.env` to copy. Override one
+inline (`DB_PASS=… docker compose up -d`) or in a gitignored `.env` if you want
+to. `ECOTRACK_CORS_ALLOWED_ORIGINS` already defaults to include
+`http://localhost:5173`, which is what lets the Vite dev server call it.
 
 This is **two origins** — the SPA on 5173, the API on 8080 — which is the shape
 production has. The full-stack Caddy recipe that used to be here was one origin
@@ -554,7 +584,7 @@ container, so nothing breaks when they die.
 - **Vercel build settings are not in version control.** Root directory, build
   command and the ignored-build-step are dashboard state since Terraform stopped
   managing the project; the values are in step 1b. The two `VITE_*` variables
-  are the exception — `deploy.yml` overwrites them on every deploy.
+  are the exception — `build-web.yml` overwrites them on every build.
 - `VITE_*` / `EXPO_PUBLIC_*` are **bundle-time**, not runtime — changing one and
   restarting the app does nothing. But bundle-time is not the same as *binary*
   time on mobile: `eas update` re-bundles, so an OTA does repoint an installed
@@ -577,7 +607,8 @@ container, so nothing breaks when they die.
   `backend_max_instances` is free to be raised — one execution runs one process,
   not one per serving instance (TODO-81).
 - **A deploy must roll the jobs as well as the service.** All three ignore
-  Terraform's `image`, so the `gcloud run jobs update` step in `deploy.yml` is
+  Terraform's `image`, so the `gcloud run jobs update` step in
+  `deploy-backend.yml` is
   what keeps the nightly jobs on the same commit as the API. A job left behind
   fails silently at 02:00, in a place nobody is looking.
 - **Check a job by running it, not by waiting for 02:00:**

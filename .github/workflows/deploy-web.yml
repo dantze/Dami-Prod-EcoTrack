@@ -1,0 +1,112 @@
+name: Deploy Web
+
+# THE BUTTON. It builds nothing and tests nothing - Build Web already did both
+# on merge, and produced the `.vercel/output` bundle this uploads.
+#
+# It refuses if no bundle exists for the commit. That is the safety property:
+# you cannot ship a commit that was never built against a real backend URL.
+#
+# **The Vercel project must stay Git-DISCONNECTED.** A connected project deploys
+# on its own push webhook, which puts main in production without this button.
+#
+# SECRETS: VERCEL_API_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: 'Commit SHA whose bundle to promote. Blank = this commit.'
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  promote:
+    name: Promote to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Require deploy credentials
+        run: |
+          MISSING=""
+          [ -n '${{ secrets.VERCEL_API_TOKEN }}' ]  || MISSING="$MISSING VERCEL_API_TOKEN"
+          [ -n '${{ secrets.VERCEL_ORG_ID }}' ]     || MISSING="$MISSING VERCEL_ORG_ID"
+          [ -n '${{ secrets.VERCEL_PROJECT_ID }}' ] || MISSING="$MISSING VERCEL_PROJECT_ID"
+          if [ -n "$MISSING" ]; then
+            echo "::error title=Not configured::Missing repository secrets:$MISSING. See DEPLOYMENT.md."
+            exit 1
+          fi
+
+      # Finds the Build Web run that produced the bundle for this commit. `gh`
+      # is preinstalled on the runner and GITHUB_TOKEN can read the repo's own
+      # runs, so no extra credential is involved.
+      - name: Find the built bundle
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SHA='${{ inputs.commit }}'
+          [ -n "$SHA" ] || SHA="${GITHUB_SHA}"
+
+          RUN_ID=$(gh run list --repo "${GITHUB_REPOSITORY}" \
+                     --workflow build-web.yml --status success \
+                     --commit "$SHA" --limit 1 --json databaseId \
+                     --jq '.[0].databaseId')
+
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::error title=No bundle::No successful Build Web run for commit $SHA. Merge it so the build runs, or pass a commit that has one."
+            exit 1
+          fi
+
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Promoting the bundle from run $RUN_ID (commit $SHA)"
+
+      - name: Download the bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: web-bundle-${{ steps.find.outputs.sha }}
+          path: .vercel/output
+          run-id: ${{ steps.find.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      # --prebuilt uploads .vercel/output as-is. No Vite, no npm ci, no network
+      # fetch of the OCR assets - all of that happened in Build Web.
+      - name: Deploy
+        id: deploy
+        run: |
+          URL=$(vercel deploy --prebuilt --prod --token='${{ secrets.VERCEL_API_TOKEN }}')
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $URL"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Web live"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| URL | ${{ steps.deploy.outputs.url }} |"
+            echo "| Commit | \`${{ steps.find.outputs.sha }}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

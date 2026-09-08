@@ -23,7 +23,7 @@ on:
       - '.github/scripts/bundle_budget.py'
       # The toolchain version both this workflow and developers read (TODO-48).
       - '.nvmrc'
-  # deploy.yml calls this workflow as its gate.
+  # deploy-web.yml calls this as its gate.
   workflow_call:
 
 concurrency:

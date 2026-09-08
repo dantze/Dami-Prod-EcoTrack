@@ -27,11 +27,11 @@ unless its status says otherwise.
 **Status legend:** `[ ]` not started · `[~]` in progress · `[DONE]` done ·
 `[POSTPONED]` deliberately deferred · `[?]` needs a decision first
 
-**Next free ID: TODO-92.** (Highest used is TODO-91.)
+**Next free ID: TODO-96.** (Highest used is TODO-95.)
 
 ---
 
-## Still open — 5 of 91
+## Still open — 6 of 95
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
@@ -39,13 +39,13 @@ The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 - **TODO-82** `[ ]` — Two Mantine providers are mounted and neither is ever used *(G)*
 - **TODO-83** `[ ]` — `Button`'s default variant is `secondary`, and one screen relied on it by accident *(G)*
 - **TODO-87** `[ ]` — The bundle ceiling still describes headroom over a build CI no longer makes *(G)*
+- **TODO-94** `[ ]` — Revoke the orphaned Firebase API key *(G)*
 - **TODO-89** `[ ]` — What `infra/` deliberately does not do *(G)*
 
 **Done, but flagged by whoever did it** — not open, but not finished-and-forgotten
 either:
 
 - **TODO-07** `[DONE — needs your eyes]` — BUG: drag-and-drop from "Neasignate" assigns on a nudge *(B)*
-- **TODO-16** `[DONE — one judgement call, see below]` — Remove recommended additions to routes *(F)*
 
 ---
 
@@ -71,7 +71,7 @@ full text lives further down.
 | TODO-13 | `[DONE]` | E | Scan an ID to autofill nume complet + CNP |
 | TODO-14 | `[DONE]` | E | ID photos must not be readable by the developer |
 | TODO-15 | `[DONE]` | F | Delete the Mistral-based AI work |
-| TODO-16 | `[DONE — one judgement call, see below]` | F | Remove recommended additions to routes |
+| TODO-16 | `[DONE]` | F | Remove recommended additions to routes |
 | TODO-17 | `[POSTPONED]` | F | All other AI ideas |
 | TODO-18 | `[DONE]` | G | Fix the Dependabot config |
 | TODO-19 | `[DONE]` | H | Mobile enrollment screens |
@@ -147,6 +147,10 @@ full text lives further down.
 | TODO-89 | **`[ ]`** | G | What `infra/` deliberately does not do |
 | TODO-90 | `[DONE]` | G | Vercel was in Terraform and bought nothing |
 | TODO-91 | `[DONE]` | G | The local Docker stack still modelled the droplet |
+| TODO-92 | `[DONE]` | G | Merging a PR deployed to production |
+| TODO-93 | `[DONE]` | G | A root `.env.example`, and a Firebase key nothing used |
+| TODO-94 | **`[ ]`** | G | Revoke the orphaned Firebase API key |
+| TODO-95 | `[DONE]` | G | The deploy button rebuilt everything it deployed |
 
 ---
 
@@ -2069,7 +2073,7 @@ failures.
 prod Postgres. They are orphaned, not gone; drop them by hand if the dead
 columns bother you.
 
-### TODO-16 `[DONE — one judgement call, see below]` Remove recommended additions to routes
+### TODO-16 `[DONE]` Remove recommended additions to routes
 The "recommended additions" suggestions on routes are not wanted. Remove them.
 
 **Done.** The "Grupare sugerată pentru această rută" card is gone from the
@@ -2086,6 +2090,34 @@ no *additions* — it re-sequences stops the dispatcher already put on the route
 so it read as outside "recommended additions to routes". **Say the word and it
 goes too**; `grouping.ts` would then be left with `distanceKm`, which the map
 feature imports.
+
+**The word was said. That card is now gone too, and the board suggests
+nothing.** `DispatchSuggestions`, `suggestStopOrder`, `orderByProximity`,
+`pathLengthKm`, `MIN_SAVING_KM` and `ReorderSuggestion` are deleted;
+`grouping.ts` is `distanceKm` and nothing else, exactly as predicted above. The
+`useReorderRouteTasks` mutation stays — drag and keyboard reordering both use
+it, and those are the dispatcher acting, not the app proposing.
+
+**Why this took two passes is the interesting part, and it is fixed
+structurally.** The first removal was scoped to the words in the item's title
+("recommended *additions*"), which was a defensible reading and the wrong one:
+the reporter saw a suggestion card on the routes screen months later and
+reasonably concluded nothing had been done. Judgement calls left inside a DONE
+item do not survive contact with time.
+
+So there is now a tripwire rather than a promise:
+`features/technical/__tests__/noRouteSuggestions.test.ts` fails if anything
+under `src/features/technical` contains `suggest`, `sugerat`, `sugestie`,
+`recomand` or `SuggestionCard`, and separately asserts that `grouping.ts`
+exports exactly `['distanceKm']`. It strips comments before scanning, so the
+files that explain the removal can go on explaining it. Catching the
+*vocabulary* rather than a component name is what makes a reintroduction under
+a new name fail.
+
+Scope is deliberate: **Comenzi keeps its suggestions.** `features/sales/suggestions.ts`
+autofills an order form from the client's own history, which nobody asked to
+remove; the guard is scoped to `features/technical` for that reason, and
+`SuggestionCard` stays in the kit because the order drawer uses it.
 
 ### TODO-17 `[POSTPONED]` All other AI ideas
 Deliberately deferred. Do not build AI features until the autofill use case is
@@ -3615,6 +3647,149 @@ entries that were correctly deleted with them. The alternative was leaving
 tombstone entries in that set forever. It skips paths that no longer exist now.
 
 *Found while doing TODO-79.*
+
+### TODO-92 `[DONE]` Merging a PR deployed to production
+`deploy.yml` triggered on every push to `main` touching `infra/`, `backend/`,
+`web/` or `shared/`. So merging a pull request applied Terraform, rolled a Cloud
+Run revision and rebuilt the Vercel frontend — there was no way to work on main
+for a while and ship when ready, which is the actual workflow.
+
+**Done — three buttons, no automatic deploys.** `deploy-backend.yml`,
+`deploy-web.yml` and `deploy-mobile.yml` are `workflow_dispatch` only;
+`deploy.yml` is deleted. A `workflow_dispatch` button also only appears once the
+workflow is on the default branch, so "not during the PR, only after the merge"
+is literally how GitHub behaves rather than something to enforce.
+
+Four decisions inside that are easy to reverse by accident:
+
+- **Each button re-runs its project's CI** against the chosen commit, via the
+  same reusable workflow a PR uses. A `skip_tests` input exists for a commit
+  that already went green. Cheap insurance: a manual deploy is rare.
+- **A missing secret FAILS the run** instead of skipping green. The old
+  behaviour existed because the workflow fired on every push to main and a red
+  main would have been wrong; a *button* that silently does nothing is worse
+  than a red run.
+- **Resource names come from a `RESOURCE_PREFIX` repository variable**, not from
+  Terraform outputs. State is a local file, so a runner has none — `terraform
+  output` in CI would return nothing at all. `RESOURCE_PREFIX` must match
+  `local.prefix` in `infra/main.tf`.
+- **`deploy-web.yml` asks Cloud Run for the backend URL** every run, and refuses
+  if the service is missing. Vite inlines `VITE_API_BASE_URL` at build time, so
+  a bundle is only ever as correct as the URL it was built with; a stored copy
+  is the thing that goes stale silently.
+
+**Two things this does NOT cover, deliberately.** There is no infra button: with
+local state a CI `terraform plan` starts from empty and proposes creating
+everything, which is worse than no plan at all, so `apply` stays on a laptop
+until state moves to GCS. And a **Git-connected Vercel project would deploy on
+its own push webhook**, bypassing the button entirely — the project is
+deliberately unconnected, and DEPLOYMENT.md step 1b says so.
+
+*Found while cleaning up `.github`.*
+
+### TODO-93 `[DONE]` A root `.env.example`, and a Firebase key nothing used
+Two leftovers found while answering "what secrets does this app actually have".
+
+**The root `.env.example`** described the droplet stack: a Caddy domain, Spaces
+keys, the SPA's build args. TODO-91 cut compose down to Postgres plus the
+backend, and every remaining value has a `:-` default in `docker-compose.yml` —
+so `docker compose up` works with no `.env` at all and the template documented
+knobs that CLAUDE.md already covers. Deleted, along with the second
+`--env-file .env.example` pass in repo-hygiene's compose check, which existed to
+pin that the template was still sufficient. **The per-project ones stay**:
+`backend/.env.example` is the template for `backend/.env`, which the `bootRun`
+task actually loads, and `web/` and `mobile/` document their build-time vars.
+
+**`mobile/google-services.json`** was committed with a live Google API key, and
+was the only entry in the hygiene scanner's allowlist — exempted on the grounds
+that a Firebase config ships inside the APK by design and the key is restricted
+to the package plus the release SHA-1. That reasoning was sound and the premise
+was not: **nothing in the app uses Firebase.** No `firebase` or
+`@react-native-firebase` dependency, no import anywhere under `mobile/`, no
+`expo-notifications`. The single reference was `googleServicesFile` in
+`app.config.js`, so it was config wired to nothing — the same shape as the Maps
+key TODO-72 removed.
+
+The file and that line are gone, and `ALLOWED_FINDINGS` in `repo_hygiene.py` is
+now empty, which is the right resting state: the scanner detects
+`google-services.json` and `AIza…` keys as before, with no standing exception.
+Removing it is a NATIVE change, so it reaches the field on the next `eas build`,
+not on an OTA — irrelevant in practice, since nothing read it.
+
+**The key itself still exists in Google Cloud** and must be revoked by hand;
+that is TODO-94.
+
+One guard bug fell out, the twin of the one TODO-91 found: `check_secret_filenames`
+read `git diff --name-only`, which lists DELETED paths, so removing
+`google-services.json` failed the scan for the file being removed. Taking a
+credential out of the repo is the fix, not the offence. It skips paths that no
+longer exist now, as `check_ci_coverage` already did.
+
+### TODO-94 `[ ]` Revoke the orphaned Firebase API key
+TODO-93 deleted `mobile/google-services.json` from the repo, but deleting a file
+does not revoke a credential. The key `AIzaSy…FH-WA` in Firebase project
+`ecotrack-ae5f1` (project number 634134447254) is still live, and every APK ever
+built from this repo still carries it.
+
+**Deciding it needs** nothing — it is a task, not a question. Google Cloud
+Console → APIs & Services → Credentials, find the Android key for
+`com.damiprod.ecotrack`, confirm nothing else uses it, delete it. If the whole
+`ecotrack-ae5f1` Firebase project is also unused, delete that instead and the
+key goes with it. Low urgency: the key is package- and SHA-1-restricted, so it
+is not a general-purpose credential — but it is a billable one attached to a
+project nobody owns any more, and this repo no longer records that it exists.
+
+*Found while doing TODO-93.*
+
+### TODO-95 `[DONE]` The deploy button rebuilt everything it deployed
+TODO-92 made deploying a button instead of a merge, but each button still ran
+the project's CI and then built the artifact — five to eight minutes for the
+backend, and a compiler between pressing the button and the thing going live.
+That is not a "push to production", it is a build that happens to be manual, and
+it means the bytes users get were produced *after* the decision to ship rather
+than being the ones that were tested.
+
+**Done — build on merge, promote on the button.** Three new workflows run on
+merge to main, each behind its project's CI, each producing the real artifact
+and parking it where no user can reach it:
+
+| | builds | parks it as |
+|---|---|---|
+| `build-backend.yml` | docker image | Artifact Registry tag `sha-<commit>` |
+| `build-web.yml` | `vercel build` | GitHub artifact `web-bundle-<commit>` |
+| `build-mobile.yml` | `eas update` | EAS branch `staging`, which no device follows |
+
+The three `deploy-*` workflows then do exactly one thing each: a Cloud Run
+revision swap onto an existing tag, a `vercel deploy --prebuilt` of a downloaded
+bundle, an `eas update:republish` from staging to production. No test suite, no
+compiler, about a minute.
+
+Four properties fall out of the split, and all four are the point:
+
+- **A deploy refuses when the artifact is missing.** `gcloud artifacts docker
+  images describe` and a `gh run list` lookup both fail loudly rather than
+  falling back, so a commit that was never built cannot be shipped.
+- **Rollback is the same button.** `image_tag` on Deploy Backend, `commit` on
+  Deploy Web: promote an older artifact.
+- **Secrets fail a deploy and only skip a build.** A build is automatic and a
+  red main would be wrong; a button that silently does nothing is worse than a
+  red run.
+- **Build-time values are fixed at build time.** `VITE_API_BASE_URL` and
+  `EXPO_PUBLIC_*` are inlined by their bundlers, so `build-web` reads the Cloud
+  Run URL and `build-mobile` checks the Expo variables. A promotion cannot
+  change either, which is the honest model — it was previously possible to
+  promote and get a different URL than the one tested.
+
+**Two things this does not achieve.** `eas build` compiles native code, so the
+`build-preview` and `build-production` actions on Deploy Mobile genuinely build
+and keep the backend-URL guard; nothing can pre-build a store binary. And
+`eas update:republish --branch staging --destination-branch production` is
+written from the EAS documentation and **has never been executed here** — there
+is no Expo project to run it against — so confirm the flags on the first real
+promotion. The same caveat applies to every command in these workflows: no GCP
+project and no Vercel project exist yet.
+
+*Found while polishing `.github`.*
 
 ## H. Mobile
 

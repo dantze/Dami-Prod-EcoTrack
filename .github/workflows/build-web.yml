@@ -1,0 +1,154 @@
+name: Build Web
+
+# Runs on every merge to main that touches web/. Tests, then builds the SPA and
+# uploads the finished .vercel/output as a GitHub artifact.
+#
+# It DEPLOYS NOTHING. Deploy Web downloads this artifact and hands it to Vercel
+# with --prebuilt, so the button uploads a bundle that was already built and
+# tested against the live backend URL - it never runs Vite.
+#
+# The backend URL is read from Cloud Run HERE, at build time, because Vite
+# inlines VITE_API_BASE_URL into the bundle: the artifact is only correct for
+# the backend it was built against, and that has to be decided before the
+# bundle exists rather than at promotion.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'shared/**'
+      - '.github/workflows/build-web.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-web-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  GCP_REGION: ${{ vars.GCP_REGION || 'europe-west1' }}
+  RESOURCE_PREFIX: ${{ vars.RESOURCE_PREFIX || 'ecotrack-dev' }}
+
+jobs:
+  verify:
+    name: Verify
+    uses: ./.github/workflows/ci-web.yml
+
+  bundle:
+    name: Build and publish bundle
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+    steps:
+      - name: Are the cloud secrets present?
+        id: check
+        run: |
+          if [ -n '${{ secrets.VERCEL_API_TOKEN }}' ] && [ -n '${{ secrets.VERCEL_PROJECT_ID }}' ] \
+             && [ -n '${{ secrets.GCP_CREDENTIALS_JSON }}' ] && [ -n '${{ secrets.GCP_PROJECT_ID }}' ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=No cloud yet::Vercel or GCP secrets are unset, so there is nothing to build against. Tests still ran."
+          fi
+
+      - name: Checkout
+        if: steps.check.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        if: steps.check.outputs.configured == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
+
+      - name: Set up gcloud
+        if: steps.check.outputs.configured == 'true'
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      # Refuses rather than guesses: a bundle built against an empty URL is a
+      # convincing app that talks to nothing, and it only fails in the browser.
+      - name: Read the backend URL from Cloud Run
+        if: steps.check.outputs.configured == 'true'
+        id: backend
+        run: |
+          URL=$(gcloud run services describe "${RESOURCE_PREFIX}-backend" \
+                  --region "${GCP_REGION}" --format='value(status.url)' 2>/dev/null || true)
+          if [ -z "$URL" ]; then
+            echo "::error title=No backend::Cloud Run service ${RESOURCE_PREFIX}-backend not found in ${GCP_REGION}. Deploy the backend first."
+            exit 1
+          fi
+          echo "api_base_url=${URL}/api" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: steps.check.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Vercel CLI
+        if: steps.check.outputs.configured == 'true'
+        run: npm install --global vercel@latest
+
+      # Written on every build rather than once by hand, so a backend URL that
+      # ever does change corrects itself. Remove-then-add because `vercel env
+      # add` refuses to overwrite.
+      - name: Point the Vercel project at this backend
+        if: steps.check.outputs.configured == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_API_TOKEN }}
+          API_BASE_URL: ${{ steps.backend.outputs.api_base_url }}
+        run: |
+          for TARGET in production preview; do
+            for PAIR in "VITE_API_BASE_URL=$API_BASE_URL" "VITE_DATA_MODE=live"; do
+              NAME="${PAIR%%=*}"
+              VALUE="${PAIR#*=}"
+              vercel env rm "$NAME" "$TARGET" --yes --token="$VERCEL_TOKEN" >/dev/null 2>&1 || true
+              printf '%s' "$VALUE" | vercel env add "$NAME" "$TARGET" --token="$VERCEL_TOKEN"
+            done
+          done
+
+      - name: Pull Vercel project settings
+        if: steps.check.outputs.configured == 'true'
+        run: vercel pull --yes --environment=production --token='${{ secrets.VERCEL_API_TOKEN }}'
+
+      - name: Build
+        if: steps.check.outputs.configured == 'true'
+        run: vercel build --prod --token='${{ secrets.VERCEL_API_TOKEN }}'
+
+      # `.vercel/output` IS the deployable artifact - `vercel deploy --prebuilt`
+      # uploads exactly this and runs no build of its own.
+      - name: Upload the bundle
+        if: steps.check.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-bundle-${{ github.sha }}
+          path: .vercel/output
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Summary
+        if: steps.check.outputs.configured == 'true'
+        run: |
+          {
+            echo "### Web bundle published"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Artifact | \`web-bundle-${GITHUB_SHA}\` |"
+            echo "| Built against | ${{ steps.backend.outputs.api_base_url }} |"
+            echo ""
+            echo "Nothing is deployed. Run **Deploy Web** to put it live."
+          } >> "$GITHUB_STEP_SUMMARY"

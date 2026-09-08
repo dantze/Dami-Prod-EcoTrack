@@ -62,7 +62,6 @@ module.exports = {
                 foregroundImage: "./assets/images/adaptive-icon.png",
                 backgroundColor: "#ffffff"
             },
-            googleServicesFile: "./google-services.json",
             edgeToEdgeEnabled: true,
             predictiveBackGestureEnabled: false,
             // Computed above (TODO-85): on only for an http:// backend.

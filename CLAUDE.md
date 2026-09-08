@@ -9,8 +9,8 @@ tool — each has its own dependencies and is built from its own directory.
 
 | Dir | Stack | Deploy |
 |---|---|---|
-| `backend/` | Spring Boot 3.5, Java 21, Gradle, JPA | `deploy.yml` → Cloud Run, with Cloud SQL behind it |
-| `web/` | React 19, Vite 6, Tailwind 4, TanStack Query, React Router 7 | `deploy.yml` → Vercel |
+| `backend/` | Spring Boot 3.5, Java 21, Gradle, JPA | `build-backend.yml` + `deploy-backend.yml` → Cloud Run, Cloud SQL behind it |
+| `web/` | React 19, Vite 6, Tailwind 4, TanStack Query, React Router 7 | `build-web.yml` + `deploy-web.yml` → Vercel |
 | `mobile/` | Expo ~54 / React Native 0.81, expo-router. **Drivers only** (TODO-33) | `deploy-mobile.yml` → EAS Update (OTA) / EAS Build |
 
 **See `DEPLOYMENT.md`** for triggers, required secrets and the runbook. The
@@ -32,9 +32,9 @@ Manager, Cloud Scheduler, a VPC and three least-privilege service accounts. Six
 modules under `infra/modules/` — `network`, `database`, `registry`, `iam`,
 `storage`, `backend` — with
 `infra/main.tf` holding only locals, the API enablement and the module wiring,
-and the root `variables.tf` / `outputs.tf` holding every name `deploy.yml` binds
-to. **The `.tf` files carry no comments**; what used to be written in them is in
-this file. `deploy.yml` applies it; `ci-infra.yml` is its path-filtered gate
+and the root `variables.tf` / `outputs.tf` holding the names the runbook uses. **The `.tf` files carry no comments**; what used to be written in them is in
+this file. **`terraform apply` is run from a laptop, not CI** (TODO-92);
+`ci-infra.yml` is the path-filtered gate
 (`terraform fmt` + `validate`, no credentials needed).
 
 **There is one deployment, named `dev`.** `var.environment` is a token in every
@@ -43,14 +43,14 @@ and no second stack. **It is not the Spring profile.** `spring_profiles_active`
 stays `prod` regardless, because that is what selects Postgres; a container
 running the Spring `dev` profile would use the H2 file DB in ephemeral container
 storage, and with `min_instances = 0` every write would vanish the moment the
-instance went away. The fallback names in `deploy.yml` follow the same
-`ecotrack-dev-*` shape and must be changed with it.
+instance went away. The deploy workflows derive every resource name from the
+`RESOURCE_PREFIX` repository variable, which must match `local.prefix`.
 
 **Vercel is deliberately NOT in Terraform.** It was, and everything it managed
 was a one-time setting — the project, its build commands, its two `VITE_*`
 variables — bought at the price of a Vercel token in the blast radius of every
 `terraform apply` and dashboard edits being silently reverted. So the project is
-created by hand, and `deploy.yml` writes `VITE_API_BASE_URL` and
+created by hand, and `build-web.yml` writes `VITE_API_BASE_URL` and
 `VITE_DATA_MODE` onto it with `vercel env` before each build. Terraform still
 knows the project's NAME, because the backend's CORS list is computed from it.
 
@@ -101,9 +101,40 @@ Five things hold that description up, all easy to undo by accident:
   must stay `sensitive = true` in the root `infra/variables.tf`, which that
   workflow greps by name.
 
-**Nothing has been applied yet**: there is no GCP project and no Vercel account,
-so `deploy.yml` skips itself (green) until the secrets exist. `DEPLOYMENT.md`
-has the one-time setup.
+**Nothing has been applied yet**: there is no GCP project and no Vercel account.
+`DEPLOYMENT.md` has the one-time setup.
+
+**Deploying is a BUTTON, never a merge, and the button never builds**
+(TODO-92, TODO-95). Merging to main runs `build-backend.yml` / `build-web.yml` /
+`build-mobile.yml`: each runs its project's CI, produces the real artifact, and
+parks it somewhere no user can reach — a `sha-…` tag in Artifact Registry, a
+`.vercel/output` bundle uploaded as a GitHub artifact, an EAS update on the
+**staging** branch. The three deploy workflows are `workflow_dispatch`-only and do nothing
+but promote one of those: a Cloud Run revision swap, a `--prebuilt` upload, an
+`eas update:republish`. A deploy is therefore ~1 minute and byte-identical to
+what CI tested.
+
+**Each deploy refuses when the artifact is missing**, which is the safety
+property that matters: you cannot ship a commit that was never built. And a
+missing secret **fails** a deploy while it only **skips** a build — a build is
+automatic and a red main would be wrong, whereas a button that silently does
+nothing is worse than a red run.
+
+`image_tag` on Deploy Backend and `commit` on Deploy Web also make rollback
+ordinary: promote an older artifact. Three consequences worth holding on to:
+
+- **The Vercel project must stay Git-DISCONNECTED.** Connect it and Vercel
+  deploys on its own push webhook, which puts main in production without anyone
+  pressing anything and makes `deploy-web.yml` decoration.
+- **The backend URL is fixed at BUILD time, not at promotion.** Vite inlines
+  `VITE_API_BASE_URL`, so `build-web.yml` reads it from Cloud Run (not from a
+  Terraform output — state is local, a runner has none) and refuses if the
+  service is missing. The same is true of `EXPO_PUBLIC_*` on mobile, which the
+  bundler inlines when `eas update` runs. A promotion cannot change either.
+- **Native mobile builds are the one exception to "buttons never build".**
+  `eas build` compiles native code; nothing can pre-build a store binary. The
+  `build-preview` and `build-production` actions on Deploy Mobile therefore do
+  bundle, and carry the same backend-URL guard `build-mobile.yml` has.
 
 ## Commands
 
@@ -551,12 +582,12 @@ or `@/mocks` directly. That rule is the only thing keeping the two implementatio
 substitutable. The `web-data-layer` skill has the full procedure.
 
 Mock is the default for local development, where it needs no backend at all.
-**Production builds live mode**, on Vercel: `deploy.yml` writes
+**Production builds live mode**, on Vercel: `build-web.yml` writes
 `VITE_DATA_MODE=live` and an ABSOLUTE `VITE_API_BASE_URL` — the Cloud Run URL
 plus `/api` — onto the Vercel project with `vercel env`, on every deploy, and
 Vite inlines both at build time. The absolute URL is why the frontend must be
-rebuilt whenever the backend URL changes, and why `deploy.yml` redeploys Vercel
-after Cloud Run rather than in parallel with it.
+rebuilt whenever the backend URL changes, and why `build-web.yml` reads that URL
+from Cloud Run at build time rather than trusting a stored copy.
 
 `web/Dockerfile` is gone (TODO-91) — nothing built the SPA into an image once
 Caddy went, and while it existed it was a second place a `VITE_*` default could
@@ -814,9 +845,3 @@ Deliberate or unresolved; do not assume these are safe.
   obviously-wrong-but-diagnosable otherwise; an **empty** value counts as unset
   there, since an unset GitHub variable interpolates to `''` and `??` would not
   catch it.
-
-## Security scanning
-
-`.github/instructions/snyk_rules.instructions.md` applies repo-wide: run a Snyk
-code scan on newly generated first-party code, fix what it reports using its
-context, and rescan until clean.

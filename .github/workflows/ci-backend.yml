@@ -1,9 +1,12 @@
 name: CI Backend
 
-# PATH FILTERING IS LOAD-BEARING. CLAUDE.md: the per-project `paths:` filters
-# are the reason three independently deployed projects can share one repo. Do
-# not remove them. Anything that must run on EVERY pull request regardless of
-# which project changed belongs in repo-hygiene.yml instead.
+# Stage 1 of the PR gate, for backend/ only.
+#
+# The `paths:` filter is load-bearing: per-project filters are why three
+# independently deployed projects share one repo. Anything that must run on
+# EVERY PR belongs in repo-hygiene.yml instead. shared/ is listed because the
+# fulfilment golden fixture lives there and both suites read it (TODO-41).
+
 on:
   pull_request:
     paths:
@@ -24,8 +27,8 @@ on:
       - '.github/workflows/ci-backend.yml'
       - '.github/scripts/junit_summary.py'
       - '.github/scripts/jacoco_summary.py'
-  # deploy.yml calls this workflow as its gate, so a deploy can never
-  # ship a commit whose tests were not run.
+  # deploy-backend.yml calls this as its gate, so a deploy can never ship a
+  # commit whose tests were not run.
   workflow_call:
 
 # A second push to the same PR cancels the first. `github.ref` on a PR is the

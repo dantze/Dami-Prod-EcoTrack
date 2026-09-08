@@ -1,23 +1,4 @@
-# =========================================================================
-# The LOCAL backend environment: Postgres + the backend image.
-#
-# THIS IS NOT DEPLOYED ANYWHERE, and it is not how you normally run the backend
-# either — `./gradlew bootRun` does that on H2, with no Docker at all. This
-# exists for the one thing bootRun cannot give you: the backend against REAL
-# POSTGRES. Production is Postgres, local defaults to H2, and `ddl-auto=update`
-# with no migration tool means that gap can bite.
-#
-# It used to bring up the SPA behind Caddy too, because one `docker compose up`
-# on a droplet WAS the deployment. That went with TODO-91: Caddy served the SPA
-# and /api on ONE origin, and production is two (Vercel and Cloud Run), so the
-# full-stack recipe modelled a shape that no longer exists. Run the SPA with
-# `npm run dev` against this backend instead — DEPLOYMENT.md's "Local" section
-# has that two-origin arrangement, which is what production actually looks like.
-# =========================================================================
 services:
-  # =========================================================================
-  # PostgreSQL Database Service
-  # =========================================================================
   postgres:
     image: postgres:16-alpine
     container_name: ecotrack_postgres
@@ -40,9 +21,6 @@ services:
     networks:
       - ecotrack_network
 
-  # =========================================================================
-  # Spring Boot Backend Service
-  # =========================================================================
   backend:
     build:
       context: ./backend

@@ -1,0 +1,130 @@
+name: Build Mobile
+
+# Runs on every merge to main that touches mobile/. Tests, then publishes an OTA
+# update to the **staging** EAS branch.
+#
+# It reaches NO INSTALLED PHONE. Devices follow the `production` channel; this
+# writes to `staging`, and Deploy Mobile is what republishes it across. So the
+# bundle is built, tested and sitting on EAS before anyone presses anything.
+#
+# EXPO_PUBLIC_* is inlined by the BUNDLER, and `eas update` bundles - so the
+# backend URL is fixed HERE, not at promotion. That is also why the guard below
+# is here: unset, ApiConfig.ts falls back to localhost, which on a phone is the
+# phone, and `eas update` would succeed and go green while bricking the fleet.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/build-mobile.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: build-mobile-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  STAGING_BRANCH: staging
+
+jobs:
+  verify:
+    name: Verify
+    uses: ./.github/workflows/ci-mobile.yml
+
+  bundle:
+    name: Publish to staging
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+
+    steps:
+      - name: Is EAS configured?
+        id: check
+        working-directory: .
+        run: |
+          if [ -n '${{ secrets.EXPO_TOKEN }}' ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=No EAS token::EXPO_TOKEN is unset, so nothing can be published. Tests still ran."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.configured == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.configured == 'true'
+        with:
+          # Single source of truth for the toolchain version (TODO-48).
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: expo/expo-github-action@v8
+        if: steps.check.outputs.configured == 'true'
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - run: npm ci
+        if: steps.check.outputs.configured == 'true'
+
+      - name: Require a backend URL
+        if: steps.check.outputs.configured == 'true'
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
+          EXPO_PUBLIC_WEB_APP_URL: ${{ vars.EXPO_PUBLIC_WEB_APP_URL }}
+        run: |
+          if [ -z "${EXPO_PUBLIC_API_BASE_URL// /}" ]; then
+            echo "::error::EXPO_PUBLIC_API_BASE_URL is not set (Settings → Secrets and variables → Actions → Variables)."
+            echo "Every shipped bundle inlines it. Without it the app calls http://localhost:8080/api,"
+            echo "which on a phone is the phone. Set it to the Cloud Run URL + /api."
+            exit 1
+          fi
+          case "$EXPO_PUBLIC_API_BASE_URL" in
+            */api|*/api/) ;;
+            *) echo "::error::EXPO_PUBLIC_API_BASE_URL must end in /api — every path in services/http.ts is appended to it."
+               exit 1 ;;
+          esac
+          echo "Bundling against ${EXPO_PUBLIC_API_BASE_URL}"
+
+          # A WARNING, not an error, deliberately (TODO-84). No backend URL means
+          # nothing works; no web-app URL means one signpost screen, seen only by
+          # office staff who should not be in this app, says it does not know the
+          # address instead of showing a button. Degraded, not broken.
+          if [ -z "${EXPO_PUBLIC_WEB_APP_URL// /}" ]; then
+            echo "::warning::EXPO_PUBLIC_WEB_APP_URL is not set — app/office.tsx will say it does not know the web app's address."
+          fi
+
+      - name: Publish OTA to staging
+        if: steps.check.outputs.configured == 'true'
+        env:
+          EXPO_PUBLIC_API_BASE_URL: ${{ vars.EXPO_PUBLIC_API_BASE_URL }}
+          EXPO_PUBLIC_WEB_APP_URL: ${{ vars.EXPO_PUBLIC_WEB_APP_URL }}
+          # Via env, never spliced into the run script: a commit message is
+          # attacker-controllable text and `${{ }}` would substitute it before
+          # the shell sees it, which is a command-injection hole.
+          UPDATE_MESSAGE: ${{ github.event.head_commit.message || github.sha }}
+        run: |
+          eas update \
+            --branch "${STAGING_BRANCH}" \
+            --message "$UPDATE_MESSAGE" \
+            --non-interactive
+
+      - name: Summary
+        if: steps.check.outputs.configured == 'true'
+        working-directory: .
+        run: |
+          {
+            echo "### Mobile update published to \`${STAGING_BRANCH}\`"
+            echo ""
+            echo "No installed phone has it — devices follow \`production\`."
+            echo "Run **Deploy Mobile** to republish it across."
+          } >> "$GITHUB_STEP_SUMMARY"
