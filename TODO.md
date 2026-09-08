@@ -27,11 +27,11 @@ unless its status says otherwise.
 **Status legend:** `[ ]` not started · `[~]` in progress · `[DONE]` done ·
 `[POSTPONED]` deliberately deferred · `[?]` needs a decision first
 
-**Next free ID: TODO-96.** (Highest used is TODO-95.)
+**Next free ID: TODO-100.** (Highest used is TODO-99.)
 
 ---
 
-## Still open — 6 of 95
+## Still open — 9 of 99
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
@@ -39,7 +39,10 @@ The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 - **TODO-82** `[ ]` — Two Mantine providers are mounted and neither is ever used *(G)*
 - **TODO-83** `[ ]` — `Button`'s default variant is `secondary`, and one screen relied on it by accident *(G)*
 - **TODO-87** `[ ]` — The bundle ceiling still describes headroom over a build CI no longer makes *(G)*
-- **TODO-94** `[ ]` — Revoke the orphaned Firebase API key *(G)*
+- **TODO-96** `[ ]` — Rollback reaches back further than the artifacts survive *(G)*
+- **TODO-97** `[ ]` — Nothing enforces the CI gates *(G)*
+- **TODO-98** `[ ]` — There is no "what is actually deployed" view *(G)*
+- **TODO-99** `[ ]` — About twenty shadcn primitives are imported by nothing *(G)*
 - **TODO-89** `[ ]` — What `infra/` deliberately does not do *(G)*
 
 **Done, but flagged by whoever did it** — not open, but not finished-and-forgotten
@@ -149,8 +152,12 @@ full text lives further down.
 | TODO-91 | `[DONE]` | G | The local Docker stack still modelled the droplet |
 | TODO-92 | `[DONE]` | G | Merging a PR deployed to production |
 | TODO-93 | `[DONE]` | G | A root `.env.example`, and a Firebase key nothing used |
-| TODO-94 | **`[ ]`** | G | Revoke the orphaned Firebase API key |
+| TODO-94 | `[DONE]` | G | Revoke the orphaned Firebase API key |
 | TODO-95 | `[DONE]` | G | The deploy button rebuilt everything it deployed |
+| TODO-96 | **`[ ]`** | G | Rollback reaches back further than the artifacts survive |
+| TODO-97 | **`[ ]`** | G | Nothing enforces the CI gates |
+| TODO-98 | **`[ ]`** | G | There is no "what is actually deployed" view |
+| TODO-99 | **`[ ]`** | G | About twenty shadcn primitives are imported by nothing |
 
 ---
 
@@ -3725,7 +3732,7 @@ read `git diff --name-only`, which lists DELETED paths, so removing
 credential out of the repo is the fix, not the offence. It skips paths that no
 longer exist now, as `check_ci_coverage` already did.
 
-### TODO-94 `[ ]` Revoke the orphaned Firebase API key
+### TODO-94 `[DONE]` Revoke the orphaned Firebase API key
 TODO-93 deleted `mobile/google-services.json` from the repo, but deleting a file
 does not revoke a credential. The key `AIzaSy…FH-WA` in Firebase project
 `ecotrack-ae5f1` (project number 634134447254) is still live, and every APK ever
@@ -3738,6 +3745,10 @@ Console → APIs & Services → Credentials, find the Android key for
 key goes with it. Low urgency: the key is package- and SHA-1-restricted, so it
 is not a general-purpose credential — but it is a billable one attached to a
 project nobody owns any more, and this repo no longer records that it exists.
+
+**Done — the owner revoked it.** Nothing in the tree referenced it by then, so
+there was nothing to change here; this item existed because deleting a file is
+not revoking a credential, and the two steps had to be tracked separately.
 
 *Found while doing TODO-93.*
 
@@ -3790,6 +3801,89 @@ promotion. The same caveat applies to every command in these workflows: no GCP
 project and no Vercel project exist yet.
 
 *Found while polishing `.github`.*
+
+### TODO-96 `[ ]` Rollback reaches back further than the artifacts survive
+TODO-95 made rollback a first-class move: `image_tag` on Deploy Backend and
+`commit` on Deploy Web promote an older artifact. Nothing chose how long an
+older artifact stays promotable, and three separate retention numbers now decide
+it — none of them picked with rollback in mind:
+
+- **Artifact Registry keeps the 10 most recent images** (`artifact_keep_recent_count`)
+  and deletes anything **older than 30 days** (`older_than = "2592000s"` in the
+  registry module). Both predate TODO-95, when images were pushed only on a
+  deploy. Now **every merge to main that touches `backend/` pushes one**, so ten
+  images can be a fortnight, or a single busy afternoon.
+- **The web bundle is a GitHub artifact with `retention-days: 30`**, a number
+  written while typing the workflow and not thought about.
+- **EAS keeps update history indefinitely**, so mobile is the one target where
+  rollback has no expiry.
+
+The failure is quiet and only shows up when it matters: Deploy Backend refuses
+with "no such image" at the moment you are trying to get out of trouble.
+
+**Deciding it needs** an answer to "how far back do we ever realistically roll?"
+If it is "the last handful of merges", raise `artifact_keep_recent_count` to
+something like 30 and leave the rest. If it is "any release", tag releases
+explicitly and exempt those tags from the cleanup policy, which is a bigger
+change to the registry module. The web artifact should then be set to match
+whatever that answer is, rather than being 30 by accident.
+
+### TODO-97 `[ ]` Nothing enforces the CI gates
+`repo-hygiene`, `ci-backend`, `ci-web`, `ci-mobile` and `ci-infra` all run on
+every pull request, and **none of them is a required check** — there is no
+branch protection on `main`. A red PR can be merged, and `main` can be pushed to
+directly, which is how the last few changes landed.
+
+That was fine while one person worked alone and read every run. It stops being
+fine the moment a second person has write access, or the moment somebody merges
+a red PR at the end of a long day. The whole point of the guard scripts —
+`doc_claims`, `dead_config`, `todo_index`, `cross_project_invariants` — is that
+they catch things a reviewer would not; a check nobody has to pass catches
+nothing.
+
+**Deciding it needs** a choice about direct pushes. Requiring the five checks is
+uncontroversial. Requiring a pull request as well would mean no more pushing
+straight to `main`, which the owner currently does deliberately — so the honest
+options are "required checks, direct push still allowed" (which GitHub supports:
+rulesets can require checks on the branch without requiring a PR) or the full
+PR-only flow. Pick one; the first is nearly free.
+
+### TODO-98 `[ ]` There is no "what is actually deployed" view
+Answering "which commit is live?" means opening the Actions tab, finding the
+most recent successful Deploy Backend run, and reading its summary — and doing
+it again separately for web and mobile. There is no single place that says what
+is in production.
+
+GitHub gives this away for one line per job: `environment: production` (plus a
+`url:`) on the three deploy jobs makes each run a recorded **deployment**, which
+puts a live "Environments" panel on the repo home page with the current commit,
+the URL and the history. It does not change how the buttons behave. Adding
+required reviewers to that environment would additionally turn the deploy into
+GitLab's `when: manual` — a pipeline that pauses with an approve button — but
+that is a separate decision and a worse fit for "merge several times, ship
+later", since every merge would park a pipeline waiting for approval.
+
+**Deciding it needs** nothing much; it was raised, understood and simply not
+done yet. Worth folding in the next time `.github/` is opened.
+
+### TODO-99 `[ ]` About twenty shadcn primitives are imported by nothing
+`src/components/shadcn/` holds the CLI's raw output, and a scan found roughly
+twenty files nothing imports — `accordion`, `aspect-ratio`, `card`, `chart`,
+`hover-card`, `input-otp`, `navigation-menu`, `pagination`, `progress`,
+`scroll-area`, `slider`, `questionnaire`, `bubble` and others.
+
+**Deliberately not deleted.** They cost nothing at runtime — Vite tree-shakes
+what is never imported, so they are absent from the bundle and invisible to
+`bundle_budget.py`. Deleting them buys tidiness and risks the next
+`npx shadcn add` quietly restoring a subset, leaving the directory in a state
+nobody chose. CLAUDE.md already says this layer is CLI-written and not edited by
+hand, which is an argument for leaving it alone.
+
+**Deciding it needs** a view on whether `components/shadcn/` is *vendored output*
+(leave it; regenerate when needed) or *source* (prune it). The first is the
+current stated position and the reason this is a note rather than a cleanup.
+
+*Found while polishing the repo.*
 
 ## H. Mobile
 
