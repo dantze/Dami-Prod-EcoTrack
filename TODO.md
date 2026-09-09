@@ -31,7 +31,7 @@ unless its status says otherwise.
 
 ---
 
-## Still open — 8 of 114
+## Still open — 7 of 113
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
@@ -39,7 +39,6 @@ The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 - **TODO-97** `[ ]` — Nothing enforces the CI gates *(G)*
 - **TODO-89** `[ ]` — What `infra/` deliberately does not do *(G)*
 - **TODO-110** `[ ]` — Nothing is paginated *(J)*
-- **TODO-111** `[?]` — Money is modelled but nothing bills *(D)*
 - **TODO-112** `[ ]` — `spring.jpa.open-in-view` is on by default, and warns about it every boot *(J)*
 - **TODO-113** `[ ]` — CI never runs a migration against Postgres *(G)*
 - **TODO-114** `[ ]` — The web bundle has 2 kB of headroom left *(J)*
@@ -168,7 +167,6 @@ full text lives further down.
 | TODO-108 | `[DONE]` | J | The dead-end screens have no heading, and there is no skip link |
 | TODO-109 | `[DONE]` | J | A 409 leaves the operator looking at the row that caused it |
 | TODO-110 | `[ ]` | J | Nothing is paginated |
-| TODO-111 | `[?]` | D | Money is modelled but nothing bills |
 | TODO-112 | `[ ]` | J | `spring.jpa.open-in-view` is on by default, and warns about it every boot |
 | TODO-113 | `[ ]` | G | CI never runs a migration against Postgres |
 | TODO-114 | `[ ]` | J | The web bundle has 2 kB of headroom left |
@@ -1701,28 +1699,6 @@ race, so nothing flaky), plus a test that the `FOR UPDATE` query actually runs o
 H2 — and by unit tests in `SubscriptionServiceTest` / `OrderServiceTest` pinning
 that the locking read is the one on the path (`findById` must never be called)
 and that `deactivate` stays `@Transactional`.
-
-### TODO-111 `[?]` Money is modelled but nothing bills
-`Product.price` and `Subscription.price` exist and are maintained. Nothing else
-in the system uses them: an order has no total, there is no invoice, and no
-screen aggregates revenue. For a rental and servicing business that is a
-conspicuous hole - every input for "what do we bill this client this month"
-is already in the database.
-
-*Raised while surveying the app for improvement ideas, and deliberately NOT
-built. It is the one idea on that list that is a new product surface rather than
-a repair, and it is the one most likely to be wrong: billing may well live in an
-accounting system already, in which case the right feature is an export, not an
-invoice screen.*
-
-**What deciding it needs, from the owner:** whether invoicing happens in
-EcoTrack at all. If yes - VAT handling, invoice numbering (which is a legal
-series in Romania, not a counter), and what a subscription's monthly charge is
-when a plan is retired mid-month. If no, the useful version is a per-client
-export of completed work over a date range, which is a much smaller thing and
-does not need any of the above.
-
----
 
 ## E. ID scanning & photo privacy
 
