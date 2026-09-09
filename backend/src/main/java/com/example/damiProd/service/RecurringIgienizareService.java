@@ -110,7 +110,7 @@ public class RecurringIgienizareService {
         order.setDate(new java.util.Date());
         order.setClient(client);
         order.setSubscription(plan.getSubscription());
-        order.setSanitationDate(plan.getStartDate() != null ? plan.getStartDate().toString() : null);
+        order.setSanitationDate(plan.getStartDate());
         order.setSanitationLocationAddress(plan.getSanitationLocationAddress());
         order.setSanitationLocationCoordinates(plan.getSanitationLocationCoordinates());
         order.setContact(plan.getContact());

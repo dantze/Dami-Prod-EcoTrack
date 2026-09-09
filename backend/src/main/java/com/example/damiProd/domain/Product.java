@@ -12,7 +12,7 @@ import jakarta.persistence.Table;
 @Getter
 @Setter
 @Table(name = "products")
-public class Product {
+public class Product extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

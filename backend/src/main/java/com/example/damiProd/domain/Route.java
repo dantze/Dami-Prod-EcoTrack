@@ -12,7 +12,7 @@ import java.util.List;
 @Table(name = "routes")
 @Getter
 @Setter
-public class Route {
+public class Route extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -1,5 +1,6 @@
 package com.example.damiProd.domain;
 
+import java.time.LocalDate;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -19,8 +20,8 @@ public class AmplasareOrder extends Order {
     private Boolean isIndefinite;
     private Integer durationDays;
 
-    private String startDate;
-    private String endDate;
+    private LocalDate startDate;
+    private LocalDate endDate;
 
     private String locationCoordinates; // "lat,long"
     private String locationAddress; // Human-readable address

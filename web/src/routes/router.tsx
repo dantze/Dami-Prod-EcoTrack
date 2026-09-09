@@ -33,9 +33,10 @@
 
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from '@/components/layout/AppShell';
-import { RequireAuth, RequireRole, useAuth } from '@/auth';
+import { RequireAuth, RequireRole, useAuth, isDriverOnly } from '@/auth';
 import { ForbiddenPage } from '@/features/auth/ForbiddenPage';
 import { EnrollmentPage } from '@/features/auth/EnrollmentPage';
+import { DriverAppPage } from '@/features/auth/DriverAppPage';
 import { NotFoundPage } from '@/features/auth/NotFoundPage';
 import { ErrorPage } from './ErrorPage';
 
@@ -47,11 +48,27 @@ function lazyPage(load: () => Promise<Record<string, unknown>>, name: string) {
   return async () => ({ Component: (await load())[name] as React.ComponentType });
 }
 
-/** Sends a signed-in user to the first section their roles actually grant. */
-function HomeRedirect() {
-  const { hasRole } = useAuth();
+/**
+ * Sends a signed-in user to the first section their roles actually grant.
+ *
+ * `hasRole` treats ADMIN as satisfying every gate (see AuthProvider), so an
+ * admin leaves on the first line like everyone else and never reaches the
+ * bottom of this function. What does reach it is an account holding neither
+ * office role — in practice a driver, whose app is the phone (TODO-100). Those
+ * two cases want different screens: the driver is correctly configured and
+ * needs a signpost, while an account with no usable role at all is the genuine
+ * "ask an admin" case ForbiddenPage was written for.
+ *
+ * The DRIVER check uses `isDriverOnly`, which reads `user.roles` directly:
+ * `hasRole` would answer true for an admin — harmless here only because an
+ * admin has already returned above, and fragile enough to be worth not
+ * relying on.
+ */
+export function HomeRedirect() {
+  const { hasRole, user } = useAuth();
   if (hasRole('SALES')) return <Navigate to="/comenzi" replace />;
   if (hasRole('TECH')) return <Navigate to="/rute" replace />;
+  if (user && isDriverOnly(user.roles)) return <DriverAppPage />;
   return <ForbiddenPage />;
 }
 

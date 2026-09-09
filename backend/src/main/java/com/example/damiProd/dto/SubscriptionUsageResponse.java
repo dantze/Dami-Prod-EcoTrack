@@ -6,6 +6,7 @@ import com.example.damiProd.domain.IgienizareOrder;
 import com.example.damiProd.domain.Individual;
 import com.example.damiProd.domain.RecurringIgienizare;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -26,7 +27,7 @@ public record SubscriptionUsageResponse(
         List<BlockingPlan> recurringPlans) {
 
     /** An unfinished Igienizare order. `number` is the human-facing one. */
-    public record BlockingOrder(Long id, long number, String clientName, String sanitationDate) {
+    public record BlockingOrder(Long id, long number, String clientName, LocalDate sanitationDate) {
     }
 
     /** An active recurring plan, which would keep creating new orders. */

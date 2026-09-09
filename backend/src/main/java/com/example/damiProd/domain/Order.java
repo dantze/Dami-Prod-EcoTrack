@@ -19,7 +19,7 @@ import java.util.Date;
         @JsonSubTypes.Type(value = RidicareOrder.class, name = "Ridicari"),
         @JsonSubTypes.Type(value = IgienizareOrder.class, name = "Igienizari")
 })
-public abstract class Order {
+public abstract class Order extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

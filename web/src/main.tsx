@@ -1,33 +1,16 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from 'react-router-dom';
 import { AuthProvider } from '@/auth';
 import { AppProviders } from '@/theme/AppProviders';
+import { createQueryClient } from '@/api/queryClient';
 import { router } from '@/routes/router';
 import './index.css';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Five minutes, not thirty seconds. Dispatchers move between Rute,
-      // Sarcini and Hartă constantly, and every screen is a fresh mount — at
-      // 30s almost every return trip re-fetched lists that had not changed and
-      // flashed a loading state over data already on screen. The write paths
-      // all invalidate explicitly, so freshness comes from mutations rather
-      // than from re-asking on a timer.
-      staleTime: 5 * 60_000,
-      // Keep the cache well past staleTime so a revisit renders instantly from
-      // cache and revalidates behind the existing content instead of blanking.
-      gcTime: 30 * 60_000,
-      // Alt-tabbing back to the browser is not a reason to re-query.
-      refetchOnWindowFocus: false,
-      // Nor is a mount, while the data is still inside staleTime.
-      refetchOnMount: true,
-      retry: 1,
-    },
-  },
-});
+// Cache policy and the 409-conflict refresh live in @/api/queryClient, where a
+// test can reach them.
+const queryClient = createQueryClient();
 
 // AuthProvider sits above the router (not inside a route element) so its
 // session-restore effect starts as early as possible and RequireAuth, which

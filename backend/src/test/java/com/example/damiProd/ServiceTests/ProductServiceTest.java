@@ -17,6 +17,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -202,7 +203,7 @@ class ProductServiceTest {
         order.setOrderType("Amplasari");
         order.setClient(new Company("office@acme.ro", "0311", "Bd. Firmei 20",
                 "Acme SRL", "RO12345678", "Maria"));
-        order.setStartDate("2026-09-14");
+        order.setStartDate(LocalDate.parse("2026-09-14"));
         order.setQuantity(3);
 
         when(productRepository.findById(1L)).thenReturn(Optional.of(cabin()));
@@ -234,7 +235,7 @@ class ProductServiceTest {
         order.setOrderType("Ridicari");
         order.setClient(new Individual("ana@pop.ro", "0722", "Str. Exemplu 5",
                 "Ana Pop", "2900101123456"));
-        order.setPickupDate("2026-10-02");
+        order.setPickupDate(LocalDate.parse("2026-10-02"));
         order.setPickupQuantity(2);
 
         when(productRepository.findById(1L)).thenReturn(Optional.of(cabin()));

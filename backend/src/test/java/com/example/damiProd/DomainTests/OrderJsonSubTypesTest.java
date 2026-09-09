@@ -11,6 +11,7 @@ import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
+import java.time.LocalDate;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -165,7 +166,7 @@ class OrderJsonSubTypesTest {
 
         IgienizareOrder igi = new IgienizareOrder();
         igi.setOrderType("Igienizari");
-        igi.setSanitationDate("2026-04-01");
+        igi.setSanitationDate(LocalDate.parse("2026-04-01"));
 
         RidicareOrder rid = new RidicareOrder();
         rid.setOrderType("Ridicari");

@@ -27,18 +27,22 @@ unless its status says otherwise.
 **Status legend:** `[ ]` not started · `[~]` in progress · `[DONE]` done ·
 `[POSTPONED]` deliberately deferred · `[?]` needs a decision first
 
-**Next free ID: TODO-100.** (Highest used is TODO-99.)
+**Next free ID: TODO-115.** (Highest used is TODO-114.)
 
 ---
 
-## Still open — 4 of 99
+## Still open — 8 of 114
 
 The whole of what is left, in one place. Everything not listed here is `[DONE]`.
 
 - **TODO-17** `[POSTPONED]` — All other AI ideas *(F)*
 - **TODO-97** `[ ]` — Nothing enforces the CI gates *(G)*
-- **TODO-99** `[ ]` — About twenty shadcn primitives are imported by nothing *(G)*
 - **TODO-89** `[ ]` — What `infra/` deliberately does not do *(G)*
+- **TODO-110** `[ ]` — Nothing is paginated *(J)*
+- **TODO-111** `[?]` — Money is modelled but nothing bills *(D)*
+- **TODO-112** `[ ]` — `spring.jpa.open-in-view` is on by default, and warns about it every boot *(J)*
+- **TODO-113** `[ ]` — CI never runs a migration against Postgres *(G)*
+- **TODO-114** `[ ]` — The web bundle has 2 kB of headroom left *(J)*
 
 **Done, but flagged by whoever did it** — not open, but not finished-and-forgotten
 either:
@@ -152,7 +156,22 @@ full text lives further down.
 | TODO-96 | `[DONE]` | G | Rollback reaches back further than the artifacts survive |
 | TODO-97 | **`[ ]`** | G | Nothing enforces the CI gates |
 | TODO-98 | `[DONE]` | G | There is no "what is actually deployed" view |
-| TODO-99 | **`[ ]`** | G | About twenty shadcn primitives are imported by nothing |
+| TODO-99 | `[DONE]` | G | About twenty shadcn primitives are imported by nothing |
+| TODO-100 | `[DONE]` | A | A driver opening the web app is told to ask for a role they already have |
+| TODO-101 | `[DONE]` | J | There is no schema migration tool |
+| TODO-102 | `[DONE]` | J | No business row records who changed it, or when |
+| TODO-103 | `[DONE]` | J | No optimistic locking anywhere |
+| TODO-104 | `[DONE]` | J | Observability is one health probe |
+| TODO-105 | `[DONE]` | J | One domain, three date representations |
+| TODO-106 | `[DONE]` | J | Not one foreign key in the schema is indexed |
+| TODO-107 | `[DONE]` | J | Every screen change waits for its chunk to download |
+| TODO-108 | `[DONE]` | J | The dead-end screens have no heading, and there is no skip link |
+| TODO-109 | `[DONE]` | J | A 409 leaves the operator looking at the row that caused it |
+| TODO-110 | `[ ]` | J | Nothing is paginated |
+| TODO-111 | `[?]` | D | Money is modelled but nothing bills |
+| TODO-112 | `[ ]` | J | `spring.jpa.open-in-view` is on by default, and warns about it every boot |
+| TODO-113 | `[ ]` | G | CI never runs a migration against Postgres |
+| TODO-114 | `[ ]` | J | The web bundle has 2 kB of headroom left |
 
 ---
 
@@ -784,6 +803,50 @@ of live than it appears to be.
 Two existing assertions in `LastAdminGuardTest` expected `200` from the delete
 and now expect `204`. Full backend suite: **335 passed** (was 320). Web: **514**
 (was 510).
+
+---
+
+### TODO-100 `[DONE]` A driver opening the web app is told to ask for a role they already have
+`HomeRedirect` in `web/src/routes/router.tsx` checks `SALES`, then `TECH`, then
+falls through to `ForbiddenPage`. That fallthrough is **not** reachable by an
+ADMIN — `hasRole` in `auth/AuthProvider.tsx` returns true for every gate when
+the account holds `ADMIN`, deliberately, so an admin lands on `/comenzi` like
+anyone else. Who it does catch is the **DRIVER-only** employee, and for them the
+screen says the wrong thing: *"Contul tău nu are rolul necesar... cere-i unui
+administrator să ți-l acorde"*. Their account is fine. They hold exactly the role
+they should hold, and the reason they see nothing is that **the driver
+experience is the phone** (TODO-33) — there is no driver screen in the web app
+to grant access to. So the one instruction the page gives leads to an admin who
+can only confirm the role is already there.
+
+This is the exact mirror of `mobile/app/office.tsx`, which exists because the
+reverse case was judged worth handling properly: an office employee on the phone
+is signposted to the web app and **keeps their session**, rather than being told
+"none". The web app has no matching signpost back.
+
+*Found while surveying the app for improvement ideas. Noted for the record: this
+item first claimed an ADMIN-only account hit the same screen, which is wrong —
+`hasRole`'s ADMIN clause is right there and `nav.tsx` documents it.*
+
+**The fix** is a role-aware fallthrough: when the account holds `DRIVER` and no
+office role, say so — the work lives in the driver app on the phone — instead of
+rendering the generic refusal. Anything with no usable role at all keeps the
+current message, which is correct for it. `ForbiddenPage`'s own comment already
+notes the "way out is deliberately not `/`" loop, so the new screen must not
+link home either.
+
+**Done — `features/auth/DriverAppPage.tsx`,** the mirror of
+`mobile/app/office.tsx`, reached from `HomeRedirect` when `isDriverOnly` holds.
+It offers Deconectare and nothing else: no "back into the app" button, because
+`StatusScreen`'s default action resolves to `useHomePath`, which for this
+account is `/` — the screen it is already on.
+
+The ADMIN-satisfies-every-gate rule moved into `auth/roleRules.ts` so
+`hasRole`, `HomeRedirect` and the test all read the one definition rather than
+three copies of it; that mattered because the obvious version of this fix
+(checking `hasRole('DRIVER')`) is wrong — an admin satisfies that gate too.
+`routes/__tests__/homeDestination.test.tsx` pins all five shapes of account,
+including the ADMIN case that made the first draft of this item wrong.
 
 ---
 
@@ -1638,6 +1701,28 @@ race, so nothing flaky), plus a test that the `FOR UPDATE` query actually runs o
 H2 — and by unit tests in `SubscriptionServiceTest` / `OrderServiceTest` pinning
 that the locking read is the one on the path (`findById` must never be called)
 and that `deactivate` stays `@Transactional`.
+
+### TODO-111 `[?]` Money is modelled but nothing bills
+`Product.price` and `Subscription.price` exist and are maintained. Nothing else
+in the system uses them: an order has no total, there is no invoice, and no
+screen aggregates revenue. For a rental and servicing business that is a
+conspicuous hole - every input for "what do we bill this client this month"
+is already in the database.
+
+*Raised while surveying the app for improvement ideas, and deliberately NOT
+built. It is the one idea on that list that is a new product surface rather than
+a repair, and it is the one most likely to be wrong: billing may well live in an
+accounting system already, in which case the right feature is an export, not an
+invoice screen.*
+
+**What deciding it needs, from the owner:** whether invoicing happens in
+EcoTrack at all. If yes - VAT handling, invoice numbering (which is a legal
+series in Romania, not a counter), and what a subscription's monthly charge is
+when a plan is retired mid-month. If no, the useful version is a per-client
+export of completed work over a date range, which is a much smaller thing and
+does not need any of the above.
+
+---
 
 ## E. ID scanning & photo privacy
 
@@ -3928,7 +4013,7 @@ the confirmation, and the pause model fits "every merge is a release candidate",
 not "merge for a week, then ship". Under it, every merge would park a pipeline
 waiting on someone, and those expire after 30 days.
 
-### TODO-99 `[ ]` About twenty shadcn primitives are imported by nothing
+### TODO-99 `[DONE]` About twenty shadcn primitives are imported by nothing
 `src/components/shadcn/` holds the CLI's raw output, and a scan found roughly
 twenty files nothing imports — `accordion`, `aspect-ratio`, `card`, `chart`,
 `hover-card`, `input-otp`, `navigation-menu`, `pagination`, `progress`,
@@ -3946,6 +4031,56 @@ hand, which is an argument for leaving it alone.
 current stated position and the reason this is a note rather than a cleanup.
 
 *Found while polishing the repo.*
+
+**Done — 30 files deleted, which REVERSES the decision above, on evidence that
+was not available when it was made. Flagged here because it should be reviewed
+rather than assumed correct.**
+
+The item weighed "tidiness" against the risk of a future `npx shadcn add`
+restoring a subset. What the re-scan found is that the trade was never tidiness:
+the unused primitives were the ONLY consumers of six runtime dependencies —
+`@base-ui/react`, `@shadcn/react`, `embla-carousel-react`, `input-otp`,
+`react-day-picker` and `vaul`. Those are install weight, Dependabot noise and
+supply-chain surface carried for code no screen renders. The count was 30, not
+"roughly twenty".
+
+**And the item's own stated benefit was confirmed absent**, which is worth
+recording: the bundle did NOT shrink (228.8 kB → 229.0 kB, the difference being
+this pass's own new code). Vite was already tree-shaking them exactly as the
+item said. So the case for deleting rests entirely on the dependencies, not on
+bytes.
+
+`recharts` was left in place despite the `chart` primitive going: it is a PEER
+dependency of `@mantine/charts`, which CLAUDE.md keeps as the charting library
+even though nothing imports it yet — `components/ui/__tests__/mantineStyles.test.ts`
+asserts that absence deliberately.
+
+**Reversible in one command per file** (`npx shadcn add <name>`), which is the
+main reason this was judged safe to do without asking. If the vendored-output
+position is the one you want to keep, restoring is cheap and this note is the
+record of why it was tried.
+
+---
+
+### TODO-113 `[ ]` CI never runs a migration against Postgres
+The suite builds its schema with Flyway now (TODO-101), which is a real
+improvement - but it does it on **H2**, and production is Postgres. The
+vendor-split migrations of TODO-105 make the gap concrete: `postgresql/V3` is
+executed by nothing in CI. `repo_hygiene.py` checks that a vendor migration
+exists for every database, which catches the omission but cannot catch a wrong
+one.
+
+*Found while writing TODO-105. The Postgres halves were verified by hand,
+against a real Postgres 16 in Docker, including the data cast - so what is
+missing is the repeat, not the first check.*
+
+**What deciding it needs:** a `services: postgres:` block in `ci-backend.yml`
+and a profile that points the suite at it, OR Testcontainers. The workflow is
+path-filtered on `backend/**` so the cost lands only on backend PRs. Until then,
+a change to anything under `db/migration/postgresql/` should be run against a
+real Postgres by hand - DEPLOYMENT.md's compose file is enough for it.
+
+---
 
 ## H. Mobile
 
@@ -5614,6 +5749,298 @@ Two things it needs by hand, both deliberate:
   real classes those files also contain.
 
 This was indeed a fifth surface for TODO-58's list, as this item guessed.
+
+---
+
+### TODO-101 `[DONE]` There is no schema migration tool
+`spring.jpa.hibernate.ddl-auto=update` was the whole schema story, in base and
+in prod. It can only ever ADD - which is why `intake_message`, `order_draft` and
+`individual.id_photo_url` outlived the code that mapped them, each needing a
+hand-run `ALTER TABLE` recorded in DEPLOYMENT.md - and it applies whatever the
+entities happen to say, with no reviewable record of what changed or any way to
+roll one back.
+
+*Found while surveying the app for improvement ideas. It is listed here first
+because it BLOCKS the two items after it: neither the audit columns nor a column
+retype can be applied without one.*
+
+**Done — Flyway, with the baseline generated rather than written.**
+`db/migration/common/V1__baseline.sql` is Hibernate's own schema export, taken in
+the POSTGRES dialect and then used unchanged on H2. That is what lets one file
+serve both databases: the only thing the two dialects disagreed about is how an
+enum column is spelled, and the Postgres spelling (`varchar` + `check`) is valid
+H2 while the reverse is not.
+
+**`ddl-auto` is now `validate` everywhere**, so Hibernate checks that the
+migrations still describe the entities and fails the BOOT if they have drifted.
+And the test suite builds its schema with Flyway rather than `create-drop`,
+which is what makes every test run an execution of the migrations - a migration
+that forgets a column now fails in CI instead of at a production boot.
+
+`baseline-on-migrate` is set for the databases that predate this: an existing
+developer H2 file is stamped as already at V1 rather than refused.
+
+**Verified against a real Postgres 16 in Docker**, not only H2: every migration
+applied to an empty database and `validate` passed on the result.
+
+---
+
+### TODO-102 `[DONE]` No business row records who changed it, or when
+Only `AccessRequest` and `Session` had timestamps. `Order`, `Task`, `Client`,
+`Route`, `Product`, `Subscription` and `RecurringIgienizare` had none, and no
+row anywhere recorded an author. So the app could not answer "which employee
+moved this task to COMPLETED, and when" - in an application whose entire point
+is drivers setting task statuses in the field, backed by photos deliberately
+served as per-request signed URLs.
+
+*Found while surveying the app for improvement ideas.*
+
+**Done — `domain/Auditable.java`,** a `@MappedSuperclass` carrying `createdAt`,
+`updatedAt`, `createdBy`, `updatedBy` (and the `@Version` of TODO-103), extended
+by those seven entities. `config/JpaAuditingConfig` supplies the author from the
+SecurityContext that `BearerTokenAuthenticationFilter` already populates.
+
+Two decisions worth keeping. The author is an employee **id**, not a name: a
+name is a copy that goes stale, and the employee row outlives the edit. And a
+write with nobody authenticated stays **null** rather than being attributed to a
+placeholder - the nightly Cloud Run Jobs are genuinely authorless, and inventing
+an id would put a lie in the one column that exists to say who did it.
+`RepositoryTests/AuditingTest` covers all three cases, including that a later
+editor is recorded separately from the original author.
+
+---
+
+### TODO-103 `[DONE]` No optimistic locking anywhere
+No `@Version` on any entity, so concurrent edits were silent last-write-wins -
+and because Spring Data `save()` issues a FULL-ROW update, the loser's *other*
+field changes went too. Two dispatchers with the same task open did not race on
+one field; the second to press Salvează wrote back every stale field it held.
+
+This was a long-standing entry in CLAUDE.md's "Known gaps", and
+`RepositoryTests/ConcurrencyGapsTest` pinned it deliberately, with a note saying
+that whoever added `@Version` should invert those tests rather than delete them.
+
+**Done — `@Version` on `Auditable`,** so it arrives with TODO-102 on the same
+seven entities. `Employee` and `Session` are deliberately left out: Employee is
+edited only through `AdminService`, whose last-admin guard is the stronger
+check, and Session is written on every token refresh, where a version would turn
+two devices refreshing at once into a 409 on a path that has to keep working.
+
+`ObjectOptimisticLockingFailureException` becomes a **409** with a Romanian
+message, which `serverMessage()` already shows to the operator because 409 is on
+its allowlist. The two GAP 1 tests were inverted exactly as their note asked -
+they now assert the stale write is REFUSED and that the other writer's field
+survived. TODO-109 is what makes the refusal recoverable on screen.
+
+---
+
+### TODO-104 `[DONE]` Observability is one health probe
+Actuator was on the classpath for `/actuator/health` and nothing else, and there
+was no logging configuration at all - so a multi-line Java stack trace reached
+Cloud Logging as N separate entries, N-1 of them at the wrong severity, none
+attached to the error. With the service scaling to zero across several instances
+there was also no way to tie one user's report to the lines it produced.
+
+*Found while surveying the app for improvement ideas.*
+
+**Done — JSON logs and a request id.** `config/RequestIdFilter` gives every
+request an id (honouring an inbound `X-Request-Id` if it is safe to log),
+publishes it in the MDC and echoes it on the response.
+`config/GoogleCloudLogFormat` writes one JSON object per line in the shape Cloud
+Logging actually parses.
+
+**The format is ours rather than one Spring Boot ships, and that was found by
+BOOTING it, not by reading docs.** Cloud Logging reads a TOP-LEVEL `severity`;
+ECS nests it as `log.level` and `logging.structured.json.rename` renames a member
+where it sits instead of hoisting it, so every line would have filed as INFO -
+broken alerting that looks exactly like silence. Two further faults only a real
+boot exposed: `logging.structured.json.add.service.name` collides with the
+`service` object ECS already writes and makes logback fail EVERY append, and a
+formatter must emit its own trailing newline or all 40 startup entries
+concatenate onto one line. `LoggingTests/GoogleCloudLogFormatTest` pins each of
+those, plus escaping and that a stack trace stays inside one entry.
+
+---
+
+### TODO-105 `[DONE]` One domain, three date representations
+`Order.date` was a `java.util.Date`; `AmplasareOrder.startDate`/`endDate`,
+`RidicareOrder.pickupDate` and `IgienizareOrder.sanitationDate` were **String**;
+`Task` used `LocalDate`/`LocalDateTime` and `RecurringIgienizare` already used
+`LocalDate`. A date held as text cannot be compared, range-queried or indexed by
+the database, and a malformed one is storable - which is part of why the web app
+has to own `orderPrimaryDate`: the backend could not answer "when".
+
+*Found while surveying the app for improvement ideas.*
+
+**Done for the four String columns; `Order.date` deliberately not touched.**
+They are `LocalDate` now, and the change is **wire-identical**: Jackson writes a
+`LocalDate` as the same `"YYYY-MM-DD"` string the column already held, so
+`web/` needed no change at all. `Order.date` was left alone because it is an
+INSTANT on the wire and the web's `toIsoInstant` treats it as one - retyping it
+is a semantic change to a different question, not a cleanup.
+
+**V3 is the first VENDOR-SPLIT migration** and it had to be: Postgres has no
+assignment cast from varchar to date and refuses the `ALTER` without `USING`,
+while H2 has no `USING` clause. So `db/migration/{h2,postgresql}/` each carry a
+copy, `spring.flyway.locations` lists the shared folder plus `{vendor}`, and the
+shared folder is `common/` rather than `db/migration` itself because Flyway
+scans a location RECURSIVELY and otherwise found both copies through the parent
+("Found more than one migration with version 3").
+
+`repo_hygiene.py` gained `check_vendor_migrations`, which fails a PR where a
+version exists in one vendor folder and not the other - the mistake that is
+otherwise invisible, since the suite only ever runs the H2 half. The Postgres
+half was applied to a real Postgres 16, including a row holding an empty string,
+to confirm the `NULLIF(...)::date` cast is lossless.
+
+---
+
+### TODO-106 `[DONE]` Not one foreign key in the schema is indexed
+The whole schema had exactly two indexes, both on `access_requests`. Neither
+Postgres nor H2 creates one for a foreign key constraint - only for a PRIMARY
+KEY or a UNIQUE - while the repositories are almost entirely foreign-key
+lookups: `findByRoute` (five of them), `findByClientId`, `findByTaskId`,
+`findBySubscription`, `findByRecurringPlan`, `findByEmployeeId`. Every one was a
+sequential scan whose cost grows with the TABLE rather than with the answer,
+which is invisible on a developer's forty-row H2 file and becomes the whole
+response time on a real season of orders. Deletes suffer as much as reads:
+Postgres checks every referencing table before removing a parent row.
+
+*Found while looking for the largest available performance win.*
+
+**Done — `V4__index_foreign_keys.sql`, 22 indexes,** covering only the columns
+something actually queries (an index is written on every insert, so this is the
+repository's current query set rather than every FK in the schema). Includes one
+composite for `findByRouteAndDay`, route first because a composite index is only
+usable left-to-right, and one on `employees_roles_join(role_id)` because the
+table's PRIMARY KEY already serves the other direction and cannot be read
+right-to-left. Applied to a real Postgres 16 as well as H2.
+
+---
+
+### TODO-107 `[DONE]` Every screen change waits for its chunk to download
+Each feature screen is its own lazy chunk, which is what keeps the initial
+download inside its budget - but it moves the cost to the click. Pressing Rute
+starts a round trip for 24 kB while React Router holds the previous screen on
+screen, and dispatchers move between Rute, Sarcini and Hartă constantly, paying
+it every time.
+
+*Found while measuring the web bundle.*
+
+**Done — `routes/prefetch.ts`, triggered from the nav pane on hover AND on
+focus,** so keyboard navigation gets the same head start as a pointer. Each path
+is attempted once (a rejected `import()` is not cached by the browser, so
+without the memo a failing chunk would refetch on every hover) and failures are
+swallowed, because this is speculative and the real navigation reports its own
+errors through the router's boundary. `routes/__tests__/prefetch.test.ts` holds
+the map to NAV_SECTIONS in both directions, so a screen added to the nav cannot
+silently lose prefetching and a renamed path cannot leave a dead entry behind.
+
+---
+
+### TODO-108 `[DONE]` The dead-end screens have no heading, and there is no skip link
+Two findings from the same pass. `Empty` renders its title as a plain `<div>`,
+so Acces interzis, Pagina nu a fost găsită and the router's error boundary
+offered a screen reader NO heading at all - and those are precisely the screens
+somebody arrives at confused, where "jump to the next heading" is how people
+orient themselves. Separately, the nav pane is eleven links and precedes the
+content in DOM order, so a keyboard user tabbed through all of it again on every
+navigation.
+
+*Found while writing the test for TODO-100, which could not ask for a heading
+because there was not one.*
+
+**Done — both.** `EmptyState` takes a `headingLevel` (default 2, `false` for the
+in-table variant whose chrome already carries the real heading) and applies it
+with `role`/`aria-level` **through props**, because `components/shadcn/*` is
+CLI-owned and not hand-edited and `EmptyTitle` spreads its props onto the
+element. `AppShell` gained a skip link as the first focusable element in the
+document, off-screen until focused rather than `hidden` (a hidden element is not
+focusable, so it could never be reached by the Tab press it exists to serve),
+targeting a `<main id="continut" tabIndex={-1}>` - the `tabIndex` is what lets
+focus actually move there instead of the browser merely scrolling.
+
+---
+
+### TODO-109 `[DONE]` A 409 leaves the operator looking at the row that caused it
+Introduced by TODO-103 and fixed in the same pass, but worth its own item
+because it is a general rule rather than a detail of that change. The backend
+now refuses a stale write with a 409 whose Romanian message asks the operator to
+reload - shown over a pane still displaying the STALE row. The toast asks for a
+reload and doing it by hand was the only way out.
+
+**Done — `api/queryClient.ts` invalidates every query on any 409.** By the time
+the toast is read, the pane underneath shows the other person's version and
+re-applying the edit is the ordinary next action rather than a recovery
+procedure. Everything is invalidated rather than the mutation's own keys because
+the write that lost is exactly the one whose effects are unknown; it runs only
+on a genuine conflict, so the cost lands at the one moment it is warranted. 409
+is not unique to optimistic locking - `InsufficientQuantityException` and the
+subscription guards use it too - and refetching after those is right for the
+same reason. The config moved out of `main.tsx` so a test could reach it.
+
+---
+
+### TODO-110 `[ ]` Nothing is paginated
+`grep` for `Pageable|Page<` across the backend returns zero hits. `GET
+/api/orders` returns every order, `GET /api/tasks` every task, and the web app
+filters client-side. It is fine at today's volume and degrades quietly rather
+than breaking, which is exactly why it will be noticed late - the first symptom
+is a Comenzi screen that takes a few seconds, on the busiest month of the year.
+
+*Found while surveying the app for improvement ideas. Not done in that pass: it
+is not a backend-only change. Every list endpoint's shape changes, `EcoTrackApi`
+and both of its implementations have to follow, and the client-side filtering
+and the Curente/Arhivă split would have to move to the server or be rethought -
+which is a design decision about where "derived state" lives, not a mechanical
+edit.*
+
+**What deciding it needs:** whether the archive split stays client-derived. If
+it does, pagination has to page over an already-filtered set, which means the
+server needs the fulfilment rule too - it already has it, in
+`findLiveBySubscriptionId`'s `NOT EXISTS`, so this is more feasible than it
+looks. Start with Comenzi and Sarcini; the other lists are small by nature.
+
+---
+
+### TODO-112 `[ ]` `spring.jpa.open-in-view` is on by default, and warns about it every boot
+Spring Boot logs "spring.jpa.open-in-view is enabled by default. Therefore,
+database queries may be performed during view rendering." on every start. It
+keeps a Hibernate session open for the whole request, so a lazy association
+touched during serialisation issues a query from the view layer and holds a
+connection from the pool for the entire request rather than for the transaction.
+
+*Found while booting the prod profile to verify the logging of TODO-104.*
+
+**Not done because it is not a one-line flip.** The entities lean on this
+harder than most: associations are `@JsonIgnore`d and replaced by transient
+id/name getters that walk the association at serialisation time, which is
+precisely the pattern open-in-view exists to permit. Turning it off without
+checking each of those would trade a warning for a `LazyInitializationException`
+in production.
+
+**What deciding it needs:** an inventory of the transient getters on `Order`,
+`Task` and `Client`, and either a fetch join or a DTO for each one that walks an
+association. Then set it false and keep the boot quiet.
+
+---
+
+### TODO-114 `[ ]` The web bundle has 2 kB of headroom left
+`bundle_budget.py` reports 229.0 kB gzip against a 231 kB budget. The budget is
+doing its job, but the next genuinely useful eager dependency fails the build,
+and the pressure will land on whoever adds it rather than on whoever spent the
+room.
+
+*Found while measuring the bundle for TODO-107. Deleting the 30 unused shadcn
+primitives (TODO-99) in the same pass did NOT help, which is the useful finding:
+Vite was already tree-shaking them, so that cleanup bought maintenance surface
+and six fewer dependencies, not bytes.*
+
+**What deciding it needs:** where the 118 kB entry chunk actually goes. Likely
+candidates are the UI kit being pulled in whole by the shell and `radix` at 37 kB
+eager; the honest first step is a rollup visualiser run rather than a guess.
+Either the budget rises with a reason recorded, or something moves behind a
+dynamic import.
 
 ---
 

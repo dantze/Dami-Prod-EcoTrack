@@ -12,6 +12,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -71,6 +72,27 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(IllegalArgumentException ex) {
         return body(HttpStatus.BAD_REQUEST, "Bad Request", ex.getMessage());
+    }
+
+    /**
+     * Two people edited the same record at once (TODO-103).
+     *
+     * 409 rather than 500, and with a message written to be READ: `serverMessage()`
+     * in the web app shows the server's text for exactly 400/404/409, so this
+     * sentence reaches the operator as a toast. It has to tell them the one thing
+     * that resolves it - reload, because their copy is stale - since retrying the
+     * same save would fail identically.
+     *
+     * Spring translates Hibernate's StaleObjectStateException into this at the
+     * repository boundary; catching the Spring type covers both the Spring Data
+     * path and an explicit optimistic lock taken in a service.
+     */
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, Object>> handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        log.warn("Optimistic lock failure on {}: {}", ex.getPersistentClassName(), ex.getMessage());
+        return body(HttpStatus.CONFLICT, "Conflict",
+                "Altcineva a modificat această înregistrare între timp. "
+                        + "Reîncarcă pagina și aplică modificările din nou.");
     }
 
     @ExceptionHandler(IllegalStateException.class)

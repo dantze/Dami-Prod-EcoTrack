@@ -13,6 +13,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -155,7 +156,7 @@ class ProductControllerTest {
     @Test
     void usage_shouldNameTheBlockingOrders() throws Exception {
         when(productService.usage(1L)).thenReturn(new ProductUsageResponse(true, List.of(
-                new ProductUsageResponse.BlockingOrder(9L, 41L, "Acme SRL", "Amplasari", "2026-09-14", 3),
+                new ProductUsageResponse.BlockingOrder(9L, 41L, "Acme SRL", "Amplasari", LocalDate.parse("2026-09-14"), 3),
                 new ProductUsageResponse.BlockingOrder(10L, 42L, "Ana Pop", "Ridicari", null, null))));
 
         mockMvc.perform(get("/api/products/1/usage"))

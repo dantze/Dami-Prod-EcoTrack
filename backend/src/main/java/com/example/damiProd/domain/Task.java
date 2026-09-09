@@ -14,7 +14,7 @@ import java.util.List;
 @Getter
 @Setter
 @Table(name = "tasks")
-public class Task {
+public class Task extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

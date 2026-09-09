@@ -286,7 +286,7 @@ class TaskScopingTest {
         IgienizareOrder order = new IgienizareOrder();
         order.setOrderType("Igienizari");
         order.setNumber(4242L);
-        order.setSanitationDate(LocalDate.now().toString());
+        order.setSanitationDate(LocalDate.now());
         IgienizareOrder saved = orderRepository.save(order);
         task.setOrder(saved);
         taskRepository.save(task);

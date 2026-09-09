@@ -23,6 +23,21 @@ export interface EmptyStateExtraProps {
   /** Optional glyph above the title; falls back to a neutral placeholder mark. */
   icon?: ReactNode;
   className?: string;
+  /**
+   * Heading level the title is announced at, or `false` for none (TODO-108).
+   *
+   * Defaults to 2. `Empty` renders its title as a plain `<div>`, so before this
+   * the whole-screen dead ends — Acces interzis, Pagina nu a fost găsită, the
+   * router's error boundary — offered a screen reader NO heading at all, and
+   * "jump to the next heading" (how many people navigate a page first) landed
+   * nowhere. It is set through props rather than by editing the primitive:
+   * `components/shadcn/*` is CLI-owned and not hand-edited, and `EmptyTitle`
+   * spreads its props onto the element, so ARIA reaches it intact.
+   *
+   * Pass `false` for the `sm` size inside a table body, where the surrounding
+   * chrome already carries the real heading and a second one would be noise.
+   */
+  headingLevel?: 1 | 2 | 3 | false;
 }
 
 export function EmptyState({
@@ -32,6 +47,7 @@ export function EmptyState({
   size = 'md',
   icon,
   className,
+  headingLevel = 2,
 }: EmptyStateProps & EmptyStateExtraProps) {
   return (
     <Empty className={cn('gap-2', size === 'md' ? 'py-14' : 'py-8', className)}>
@@ -45,7 +61,12 @@ export function EmptyState({
         >
           {icon ?? <Inbox />}
         </EmptyMedia>
-        <EmptyTitle className={cn('text-ink', size === 'md' ? 'text-sm' : 'text-xs')}>
+        <EmptyTitle
+          className={cn('text-ink', size === 'md' ? 'text-sm' : 'text-xs')}
+          {...(headingLevel === false
+            ? {}
+            : { role: 'heading' as const, 'aria-level': headingLevel })}
+        >
           {title}
         </EmptyTitle>
         {body && (

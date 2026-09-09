@@ -243,6 +243,56 @@ def check_action_pins() -> None:
                 )
 
 
+def check_vendor_migrations() -> None:
+    """A vendor-split Flyway migration must exist for EVERY database, not one.
+
+    Almost every migration is portable and lives in db/migration/common. The
+    exceptions - where H2 and Postgres genuinely disagree, like retyping a
+    varchar column to date - are written twice, once per vendor folder, with the
+    same version.
+
+    That duplication has a specific failure mode nothing else catches: the test
+    suite runs on H2, so a migration added ONLY to h2/ is fully green here and
+    breaks the first Postgres boot, which is production. The reverse is quieter
+    still - a migration added only to postgresql/ leaves the test database
+    without a change every test then passes without.
+
+    So: for each version present in any vendor folder, require it in all of
+    them. This says nothing about the two files being equivalent, which no
+    checker could decide; it catches the omission, which is the mistake actually
+    made.
+    """
+    vendor_root = REPO_ROOT / "backend" / "src" / "main" / "resources" / "db" / "migration"
+    if not vendor_root.is_dir():
+        return
+
+    vendors = sorted(d.name for d in vendor_root.iterdir() if d.is_dir() and d.name != "common")
+    if len(vendors) < 2:
+        return
+
+    version_of = re.compile(r"^V(\d+(?:[._]\d+)*)__")
+    per_vendor: dict[str, set[str]] = {}
+    for vendor in vendors:
+        per_vendor[vendor] = {
+            m.group(1)
+            for f in (vendor_root / vendor).glob("V*.sql")
+            if (m := version_of.match(f.name))
+        }
+
+    for vendor, versions in per_vendor.items():
+        for other, other_versions in per_vendor.items():
+            if other == vendor:
+                continue
+            for missing in sorted(versions - other_versions):
+                annotate(
+                    "error",
+                    f"backend/src/main/resources/db/migration/{other}",
+                    f"migration V{missing} exists in `{vendor}/` but not in `{other}/`. "
+                    "A vendor-split migration must be written for every database, "
+                    "or that database boots against a schema the others do not have.",
+                )
+
+
 def write_summary(changed: list[str]) -> None:
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not summary_path:
@@ -277,6 +327,7 @@ def main() -> int:
     check_secret_contents(changed, ALLOWED_FINDINGS)
     check_ci_coverage(changed)
     check_action_pins()
+    check_vendor_migrations()
 
     write_summary(changed)
 

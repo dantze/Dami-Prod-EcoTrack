@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.time.LocalDate;
 import java.util.Date;
 import java.util.List;
 
@@ -52,8 +53,8 @@ class OrderControllerTest {
         order.setProduct(product);
         order.setQuantity(3);
         order.setLocationAddress("Str. Exemplu 10, Cluj");
-        order.setStartDate("2025-07-01");
-        order.setEndDate("2025-12-01");
+        order.setStartDate(LocalDate.parse("2025-07-01"));
+        order.setEndDate(LocalDate.parse("2025-12-01"));
         return order;
     }
 

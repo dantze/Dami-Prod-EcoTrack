@@ -411,6 +411,95 @@ controller slice says the wiring works and nothing at all about who may call it.
 Security assertions belong in the `@SpringBootTest` classes under
 `SecurityTests/`, which run the real chain.
 
+## The schema is Flyway's, and it is one set of migrations for two databases
+
+`spring.jpa.hibernate.ddl-auto=validate` everywhere (TODO-101). Hibernate no
+longer builds anything — it only checks that what Flyway produced still matches
+the entities, and **fails the boot** if not. That is the whole safety property:
+drift is found at startup, not at the first query that hits a missing column.
+
+**`db/migration/common/` is the normal home, and V1 is generated output.** It is
+Hibernate's own schema export taken in the **Postgres** dialect, then used
+unchanged on H2. One file serves both because the only thing the two dialects
+disagreed about is how an enum column is spelled — H2 has a native `enum (...)`,
+Postgres writes `varchar ... check (... in ...)` — and the Postgres spelling is
+valid H2 while the reverse is not. **Never edit a migration that has run**;
+Flyway records its checksum and will refuse the database that has the old copy.
+
+**`db/migration/{h2,postgresql}/` is the exception, and it costs a rule.** V3
+had to be split because retyping `varchar` → `date` genuinely cannot be written
+once: Postgres has no assignment cast and demands `USING`, H2 has no `USING`.
+Two files, same version, one per database. Three things follow:
+
+- **The shared folder is `common/`, not `db/migration` itself.** Flyway scans a
+  location RECURSIVELY, so listing the parent found both vendor copies through
+  it and refused to start with "Found more than one migration with version 3".
+- **`repo_hygiene.py`'s `check_vendor_migrations` fails a PR** that adds a
+  version to one vendor folder and not the other. It cannot check that the two
+  are equivalent — nothing could — but the omission is the mistake that actually
+  gets made, and it is invisible otherwise.
+- **The suite runs the H2 half only** (TODO-113). `postgresql/` migrations are
+  verified by hand against a real Postgres before they land. That is the one
+  place this arrangement is weaker than it looks.
+
+`baseline-on-migrate` is on for databases that predate Flyway: an existing
+developer H2 file is stamped as already at V1 rather than refused.
+
+**The test suite builds its schema with Flyway too**, not `create-drop`. That is
+deliberate and it is what makes the migrations covered at all: every
+`@SpringBootTest` executes them and then `validate` holds them to the entities,
+so a migration that forgets a column fails in CI rather than in production.
+
+## Who changed this row, and what happens when two people change it at once
+
+`domain/Auditable.java` is a `@MappedSuperclass` carried by the seven entities
+an operator edits — `Order`, `Task`, `Client`, `Route`, `Product`,
+`Subscription`, `RecurringIgienizare`. It holds both halves.
+
+**The audit half (TODO-102).** `createdAt` / `updatedAt` / `createdBy` /
+`updatedBy`, filled by Spring Data auditing from the SecurityContext that
+`BearerTokenAuthenticationFilter` already populates. Two rules:
+
+- **The author is an employee ID, never a name.** A name is a copy that goes
+  stale; the employee row outlives the edit.
+- **A write with nobody authenticated stays NULL.** The nightly Cloud Run Jobs
+  are genuinely authorless, and inventing a placeholder id would put a lie in
+  the one column that exists to say who did it.
+
+**The locking half (TODO-103).** `@Version`, so a concurrent edit is refused
+rather than silently applied. This matters more here than usual because Spring
+Data `save()` issues a **full-row** UPDATE: two dispatchers with the same task
+open were not racing on one field — the second to press Salvează wrote back every
+stale field it was holding. `ObjectOptimisticLockingFailureException` becomes a
+**409** with a Romanian message, which `serverMessage()` shows because 409 is on
+its allowlist, and `api/queryClient.ts` invalidates the cache on any 409
+(TODO-109) so the pane underneath stops showing the row that lost.
+
+**`Employee` and `Session` are deliberately unversioned.** Employee is edited
+only through `AdminService`, whose last-admin guard is the stronger check;
+Session is written on every token refresh, where a version would turn two
+devices refreshing at once into a 409 on a path that must keep working.
+
+## Logs are JSON, and the format is ours for a reason
+
+`config/GoogleCloudLogFormat` (prod profile only) writes one JSON object per
+line; `config/RequestIdFilter` gives every request an id, publishes it in the
+MDC and echoes it as `X-Request-Id` (TODO-104).
+
+**None of Spring Boot's three built-in formats would do.** Cloud Logging reads a
+**top-level** `severity`; ECS nests it as `log.level`, and
+`logging.structured.json.rename` renames a member where it sits rather than
+hoisting it — so every line files as INFO and severity-based alerting never
+fires, which is a failure that looks exactly like nothing going wrong.
+
+Two more faults that only a real boot exposed, both pinned by
+`LoggingTests/GoogleCloudLogFormatTest`: `logging.structured.json.add.service.name`
+collides with the `service` object ECS already writes and makes logback fail
+EVERY append (a container with no logs at all), and **a formatter must emit its
+own trailing newline** or all forty startup entries concatenate onto one line. A
+stack trace goes INSIDE `message` for the same reason — raw multi-line output is
+N separate entries, N-1 at the wrong severity.
+
 ## Backend architecture
 
 Standard controller → service → repository layering under
@@ -802,19 +891,33 @@ Deliberate or unresolved; do not assume these are safe.
   idle on a menu shows the old one until it is used. Never a privilege leak —
   authorization always reads the `Employee` the token points at, never the
   cached roles.
-- **No optimistic locking anywhere.** There is no `@Version` on any entity.
-  Concurrent edits to the same task/route/order are silent last-write-wins, and
-  because Spring Data `save()` issues a full-row UPDATE, the loser's other field
-  changes are lost too.
-- `spring.jpa.hibernate.ddl-auto=update` in base and prod — there is no
-  migration tool. Local dev runs H2 while prod runs Postgres, so
-  concurrency-sensitive bugs will not reproduce locally.
+- **CLOSED (TODO-103): optimistic locking now exists.** Every entity an operator
+  edits inherits `@Version` from `domain/Auditable`, so a concurrent edit is
+  REFUSED with a 409 instead of silently winning — which used to take the
+  loser's *other* field changes with it, because Spring Data `save()` issues a
+  full-row UPDATE. `Employee` and `Session` are deliberately unversioned (see
+  TODO-103 for why). The web app invalidates its cache on any 409 (TODO-109), so
+  the pane under the toast shows the other person's version.
+- **CLOSED (TODO-101): there is a migration tool.** Flyway owns the schema and
+  `ddl-auto` is `validate` everywhere, so a boot fails loudly when the entities
+  and the migrations disagree. `db/migration/common/` holds the portable
+  migrations; `db/migration/{h2,postgresql}/` hold the ones that genuinely
+  cannot be written once, as two files with the same version, and
+  `repo_hygiene.py` fails a PR that adds one without the other. The test suite
+  builds its schema with Flyway rather than `create-drop`, so every test run
+  executes the migrations — **on H2 only**, which is the remaining gap
+  (TODO-113): production is Postgres and `postgresql/` migrations are verified
+  by hand.
+- **Local dev runs H2 while prod runs Postgres**, so concurrency-sensitive bugs
+  still will not reproduce locally.
 - **Two orphaned tables.** The Mistral-based intake feature was deleted
-  (TODO-15) but `IntakeMessage` and `OrderDraft` were JPA entities, and
-  `ddl-auto=update` never drops — their tables survive in H2 and in prod
-  Postgres. Nothing in the code references them. Drop them by hand if the dead
-  columns bother you. **Do not resurrect the feature:** AI work is postponed
-  (TODO-17) and the only sanctioned future use is autofill.
+  (TODO-15) but `IntakeMessage` and `OrderDraft` were JPA entities, and the
+  `ddl-auto=update` of the time never dropped them — their tables survive in H2
+  and in prod Postgres, and V1 does not recreate them (it was generated from
+  today's entities). Nothing in the code references them. **Since TODO-101 the
+  tidy way to remove them is a migration, not a hand-run `ALTER`.**
+  **Do not resurrect the feature:** AI work is postponed (TODO-17) and the only
+  sanctioned future use is autofill.
 - **Installed phones are one OTA behind, not one rebuild behind** (corrected by
   TODO-72). TODO-33 deleted the Sales and Technical screens and TODO-71 retired
   the droplet those phones call, and both of those ship over the air: screens

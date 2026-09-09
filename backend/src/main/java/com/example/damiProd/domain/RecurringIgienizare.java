@@ -10,7 +10,7 @@ import java.time.LocalDate;
 @Getter
 @Setter
 @Table(name = "recurring_igienizari")
-public class RecurringIgienizare {
+public class RecurringIgienizare extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

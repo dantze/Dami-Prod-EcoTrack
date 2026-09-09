@@ -31,6 +31,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/shadcn/tooltip';
 import type { Role } from '@/types/domain';
+import { prefetchRoute } from '@/routes/prefetch';
 
 export interface NavItem {
   to: string;
@@ -101,6 +102,11 @@ function NavRow({
     <NavLink
       to={item.to}
       onClick={onNavigate}
+      // Start fetching this screen's chunk on intent rather than on click
+      // (TODO-107). Focus counts as intent too, so keyboard navigation gets
+      // the same head start as a pointer.
+      onMouseEnter={() => prefetchRoute(item.to)}
+      onFocus={() => prefetchRoute(item.to)}
       className={({ isActive }) =>
         cn(
           'group relative flex items-center gap-2.5 rounded-md text-sm transition-colors',

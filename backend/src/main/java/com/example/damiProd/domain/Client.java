@@ -24,7 +24,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
         @JsonSubTypes.Type(value = Individual.class, name = "individual"),
         @JsonSubTypes.Type(value = Company.class, name = "company")
 })
-public class Client {
+public class Client extends Auditable {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;

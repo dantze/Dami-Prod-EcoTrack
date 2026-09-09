@@ -46,6 +46,7 @@ import { api, DEV_DEVICE_ID } from '@/api';
 import { IS_MOCK } from '@/lib/config';
 import type { AuthSession } from '@/api/contract';
 import type { AuthUser, Role } from '@/types/domain';
+import { roleSatisfies } from './roleRules';
 import { clearRefreshToken, readRefreshToken, saveRefreshToken, REFRESH_TOKEN_KEY } from './storage';
 import { getAccessToken, setAccessToken, setRefresher } from './tokenBridge';
 
@@ -273,14 +274,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await api.auth.logout(refreshToken).catch(() => {});
   }, [localLogout]);
 
-  // ADMIN satisfies every gate. That mirrors the backend: SecurityConfig's
-  // matrix lets ADMIN perform every business write, so an admin seeing only
-  // the Admin section while being allowed to do everything would be a lie the
-  // UI tells about the server.
+  // The ADMIN-satisfies-everything rule lives in ./roleRules, because
+  // HomeRedirect and useHomePath mirror it and it must not be restated.
   const hasRole = useCallback(
     (role: Role) => {
       if (!user) return false;
-      return user.roles.includes(role) || user.roles.includes('ADMIN');
+      return roleSatisfies(user.roles, role);
     },
     [user],
   );

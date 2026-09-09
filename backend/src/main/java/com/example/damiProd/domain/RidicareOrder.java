@@ -1,5 +1,6 @@
 package com.example.damiProd.domain;
 
+import java.time.LocalDate;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,7 +16,7 @@ public class RidicareOrder extends Order {
     @JoinColumn(name = "product_id")
     private Product product;
 
-    private String pickupDate;
+    private LocalDate pickupDate;
     private Integer pickupQuantity;
     private String pickupProductName; // Denormalized name for quick display
     private String pickupLocationAddress;

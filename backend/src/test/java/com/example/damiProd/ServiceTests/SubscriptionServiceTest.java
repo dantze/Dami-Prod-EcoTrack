@@ -21,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -63,7 +64,7 @@ class SubscriptionServiceTest {
         order.setId(id);
         order.setNumber(number);
         order.setClient(client);
-        order.setSanitationDate("2026-09-14");
+        order.setSanitationDate(LocalDate.parse("2026-09-14"));
         return order;
     }
 

@@ -24,6 +24,7 @@ import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -185,7 +186,7 @@ class FulfilmentRuleTest {
         placement.setClient(acme);
         placement.setProduct(product);
         placement.setQuantity(2);
-        placement.setStartDate("2026-03-04");
+        placement.setStartDate(LocalDate.parse("2026-03-04"));
         return placement;
     }
 
@@ -195,7 +196,7 @@ class FulfilmentRuleTest {
         order.setDate(new Date());
         order.setClient(acme);
         order.setSubscription(plan);
-        order.setSanitationDate("2026-03-04");
+        order.setSanitationDate(LocalDate.parse("2026-03-04"));
         return order;
     }
 

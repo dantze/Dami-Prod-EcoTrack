@@ -7,6 +7,7 @@ import com.example.damiProd.domain.Individual;
 import com.example.damiProd.domain.Order;
 import com.example.damiProd.domain.RidicareOrder;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -42,7 +43,7 @@ public record ProductUsageResponse(boolean blocked, List<BlockingOrder> orders) 
      * one definition of <em>when</em> an order happens (`orderPrimaryDate`).
      */
     public record BlockingOrder(Long id, long number, String clientName, String orderType,
-                                String date, Integer quantity) {
+                                LocalDate date, Integer quantity) {
     }
 
     public static ProductUsageResponse of(List<Order> liveOrders) {
@@ -60,7 +61,7 @@ public record ProductUsageResponse(boolean blocked, List<BlockingOrder> orders) 
     }
 
     /** Start date for a placement, pickup date for a pickup. */
-    private static String primaryDate(Order order) {
+    private static LocalDate primaryDate(Order order) {
         if (order instanceof AmplasareOrder amplasare) return amplasare.getStartDate();
         if (order instanceof RidicareOrder ridicare) return ridicare.getPickupDate();
         return null;

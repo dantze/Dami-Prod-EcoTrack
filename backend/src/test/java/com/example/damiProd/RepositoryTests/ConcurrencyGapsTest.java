@@ -21,17 +21,21 @@ import com.example.damiProd.service.OrderService;
 import com.example.damiProd.service.SubscriptionService;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Version;
+import org.hibernate.StaleObjectStateException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -46,10 +50,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * loudly and can be inverted, rather than the fix landing unnoticed.
  *
  * Each one is tagged with the gap it pins:
- *   GAP 1 — no {@code @Version} optimistic locking on any entity, so concurrent
- *           edits are silent last-write-wins and the loser's *other* field
- *           changes are lost too (Spring Data {@code save()} issues a full-row
- *           UPDATE).
+ *   GAP 1 — CLOSED (TODO-103). There was no {@code @Version} on any entity, so
+ *           concurrent edits were silent last-write-wins and the loser's
+ *           *other* field changes were lost too (Spring Data {@code save()}
+ *           issues a full-row UPDATE). The business entities now inherit one
+ *           from {@code Auditable}, and the two tests below were inverted from
+ *           pinning the gap to guarding the fix - which is exactly what the
+ *           note on the first of them said to do.
  *   GAP 2 — {@code OrderService.createOrder} is not {@code @Transactional} and
  *           its Ridicare availability check is a read-then-write race.
  *   GAP 3 — CLOSED (TODO-39). Subscription retirement was a check-then-act with
@@ -121,43 +128,58 @@ class ConcurrencyGapsTest {
     // =======================================================================
 
     @Test
-    @DisplayName("GAP 1: no entity declares @Version, so nothing can detect a lost update")
-    void noEntityDeclaresAVersionField() {
-        List<Class<?>> entities = List.of(
-                com.example.damiProd.domain.Order.class,
-                com.example.damiProd.domain.AmplasareOrder.class,
-                com.example.damiProd.domain.RidicareOrder.class,
-                com.example.damiProd.domain.IgienizareOrder.class,
-                com.example.damiProd.domain.Client.class,
-                com.example.damiProd.domain.Individual.class,
-                com.example.damiProd.domain.Company.class,
-                com.example.damiProd.domain.Task.class,
-                com.example.damiProd.domain.Route.class,
-                com.example.damiProd.domain.Employee.class,
-                com.example.damiProd.domain.Product.class,
-                com.example.damiProd.domain.Subscription.class,
-                com.example.damiProd.domain.RecurringIgienizare.class,
-                com.example.damiProd.domain.Session.class);
-
-        Set<String> versioned = entities.stream()
-                .filter(type -> type.isAnnotationPresent(Entity.class))
-                .filter(type -> Arrays.stream(type.getDeclaredFields())
-                        .anyMatch(field -> field.isAnnotationPresent(Version.class)))
+    @DisplayName("GAP 1 (CLOSED): every entity people edit carries @Version; Employee and Session deliberately do not")
+    void theEditedBusinessEntitiesAreVersioned() {
+        // Inherited from Auditable, so this walks the hierarchy rather than
+        // reading getDeclaredFields() on the entity itself - the original
+        // version of this test looked only at declared fields, which would now
+        // report "none" for the very entities that are versioned.
+        Set<String> versioned = Stream.of(
+                        com.example.damiProd.domain.Order.class,
+                        com.example.damiProd.domain.AmplasareOrder.class,
+                        com.example.damiProd.domain.RidicareOrder.class,
+                        com.example.damiProd.domain.IgienizareOrder.class,
+                        com.example.damiProd.domain.Client.class,
+                        com.example.damiProd.domain.Individual.class,
+                        com.example.damiProd.domain.Company.class,
+                        com.example.damiProd.domain.Task.class,
+                        com.example.damiProd.domain.Route.class,
+                        com.example.damiProd.domain.Product.class,
+                        com.example.damiProd.domain.Subscription.class,
+                        com.example.damiProd.domain.RecurringIgienizare.class)
+                .filter(ConcurrencyGapsTest::hasVersionField)
                 .map(Class::getSimpleName)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
-        // ASSERTS THE GAP. When someone adds @Version to an entity this fails —
-        // that is the signal to flip these characterisation tests into real
-        // "concurrent edit is rejected" tests.
         assertThat(versioned)
-                .as("entities with @Version — CLAUDE.md 'Known gaps': there are none, "
-                        + "so concurrent edits are silent last-write-wins")
-                .isEmpty();
+                .as("every entity an operator can edit must be able to detect a lost update")
+                .containsExactlyInAnyOrder("Order", "AmplasareOrder", "RidicareOrder",
+                        "IgienizareOrder", "Client", "Individual", "Company", "Task", "Route",
+                        "Product", "Subscription", "RecurringIgienizare");
+
+        // The two that are deliberately left out. Employee is edited only
+        // through AdminService, whose last-admin guard is a stronger check than
+        // a version would be, and Session is written by the token machinery on
+        // every refresh - versioning it would turn two devices refreshing at
+        // once into a 409 on a path that has to keep working.
+        assertThat(hasVersionField(com.example.damiProd.domain.Employee.class)).isFalse();
+        assertThat(hasVersionField(com.example.damiProd.domain.Session.class)).isFalse();
+    }
+
+    /** Walks up through {@code @MappedSuperclass} parents, unlike getDeclaredFields(). */
+    private static boolean hasVersionField(Class<?> type) {
+        for (Class<?> c = type; c != null && c != Object.class; c = c.getSuperclass()) {
+            if (Arrays.stream(c.getDeclaredFields())
+                    .anyMatch(field -> field.isAnnotationPresent(Version.class))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Test
-    @DisplayName("GAP 1: a concurrent edit silently discards the loser's UNRELATED field changes")
-    void lastWriteWins_alsoLosesFieldsTheSecondWriterNeverTouched() {
+    @DisplayName("GAP 1 (CLOSED): a concurrent edit is now REFUSED instead of discarding the loser's changes")
+    void concurrentEditIsRejected_soUnrelatedFieldChangesSurvive() {
         Task task = new Task();
         task.setType(TaskType.PLACEMENT);
         task.setStatus(TaskStatus.NEW);
@@ -173,27 +195,36 @@ class ConcurrencyGapsTest {
         Task driverCopy = taskRepository.findById(persisted.getId()).orElseThrow();
         em.detach(driverCopy);
 
-        // The dispatcher edits the notes and saves.
+        // The dispatcher edits the notes and saves. Version 0 -> 1.
         dispatcherCopy.setInternalNotes("dispatcher: call the site manager first");
         taskRepository.save(dispatcherCopy);
         em.flush();
         em.clear();
 
-        // The driver, still holding the stale copy, only marks it completed.
+        // The driver, still holding the version-0 copy, marks it completed. The
+        // UPDATE now carries `AND version = 0`, matches no row, and fails.
         driverCopy.setStatus(TaskStatus.COMPLETED);
-        taskRepository.save(driverCopy);
-        em.flush();
-        em.clear();
+        assertThatThrownBy(() -> {
+            taskRepository.save(driverCopy);
+            em.flush();
+        })
+                .as("the stale write is refused rather than silently applied")
+                .isInstanceOfAny(ObjectOptimisticLockingFailureException.class,
+                        StaleObjectStateException.class);
 
+        em.clear();
         Task reloaded = taskRepository.findById(persisted.getId()).orElseThrow();
 
-        assertThat(reloaded.getStatus()).isEqualTo(TaskStatus.COMPLETED);
-        // ASSERTS THE BUG: the driver never touched internalNotes, but save()
-        // issued a full-row UPDATE from a stale snapshot, so the dispatcher's
-        // note is gone with no error anywhere.
+        // GUARDS THE FIX. Both halves matter: the dispatcher's note survives,
+        // AND the driver's status change did not land - so the driver's client
+        // gets a 409 and re-reads, instead of both edits appearing to succeed
+        // while one quietly disappeared.
         assertThat(reloaded.getInternalNotes())
-                .as("the dispatcher's note was silently reverted by an unrelated edit")
-                .isEqualTo("original notes");
+                .as("the dispatcher's note is intact")
+                .isEqualTo("dispatcher: call the site manager first");
+        assertThat(reloaded.getStatus())
+                .as("the losing write was rolled back, not half-applied")
+                .isEqualTo(TaskStatus.NEW);
     }
 
     // =======================================================================
@@ -325,7 +356,7 @@ class ConcurrencyGapsTest {
         order.setDate(new Date());
         order.setClient(acme);
         order.setSubscription(plan);
-        order.setSanitationDate("2026-09-14");
+        order.setSanitationDate(LocalDate.parse("2026-09-14"));
         return order;
     }
 

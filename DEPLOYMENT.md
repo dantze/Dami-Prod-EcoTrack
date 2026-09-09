@@ -387,8 +387,10 @@ Production*. Instant; it is a served build, not a rebuild.
 Then revert the commit so the next deploy does not re-ship it. Mobile OTA:
 `eas update:republish --branch production`.
 
-**There is no database rollback.** `ddl-auto=update` never drops anything, so a
-schema change is not undone by deploying the old image. Cloud SQL keeps 7 days
+**There is no database rollback.** Flyway migrates FORWARD only (TODO-101):
+deploying the old image does not undo a schema change, it just runs an
+application that expects the older schema against the newer one. Undoing a
+migration means writing the next one. Cloud SQL keeps 7 days
 of automated backups and point-in-time recovery — restoring is a `gcloud sql`
 operation on the instance, not part of this pipeline.
 
@@ -415,8 +417,10 @@ cd web     && npm run dev           # http://localhost:5173, mock data
 ```
 
 Docker buys exactly one thing: **the backend against real Postgres**, which is
-what production runs and what H2 is not. `ddl-auto=update` with no migration
-tool makes that gap worth closing before anything schema-shaped ships.
+what production runs and what H2 is not. That gap matters more than ever now
+that migrations exist: the test suite runs them on H2 only, so **anything under
+`backend/src/main/resources/db/migration/postgresql/` is executed by nothing in
+CI** (TODO-113). Run compose before shipping a schema change.
 
 ```bash
 docker compose up -d --build
@@ -534,10 +538,17 @@ aws s3 rm "s3://$DO_SPACES_BUCKET/persoane fizice/" \
 
 ### Dropping the column
 
-`ddl-auto=update` never drops anything, so `individual.id_photo_url` outlives
-the field that mapped it — in H2 and in Postgres, exactly like the orphaned
-`intake_message` / `order_draft` tables from TODO-15. Nothing reads it and
-nothing writes it, so this is tidiness rather than a fix. Per environment:
+`individual.id_photo_url` outlives the field that mapped it — the `ddl-auto=update`
+of the time never dropped it — in H2 and in Postgres, exactly like the orphaned
+`intake_message` / `order_draft` tables from TODO-15. Note that Flyway's V1 does
+NOT recreate any of them: it was generated from today's entities, so a database
+built from scratch is already clean and only pre-existing ones carry them.
+Nothing reads or writes it, so this is tidiness rather than a fix.
+
+**Since TODO-101 the right way to do this is a migration**, not the statement
+below — add it under `db/migration/common/` and let the next deploy apply it
+everywhere, rather than running SQL by hand on one environment and forgetting
+the other. The statement is kept because it is what the migration would contain:
 
 ```sql
 ALTER TABLE individual DROP COLUMN id_photo_url;
@@ -591,9 +602,11 @@ container, so nothing breaks when they die.
   app at a new `EXPO_PUBLIC_API_BASE_URL`. Only native changes need `eas build`.
 - `runtimeVersion` is `appVersion`: bumping `expo.version` fences OTAs off from
   older installs until they get a new binary. Intentional.
-- No DB migrations (`ddl-auto=update`). Destructive schema changes are manual,
-  and `db_deletion_protection` in `infra/` is what stops `terraform destroy`
-  taking the schema with it. Keep it `true`.
+- DB migrations are **Flyway**, applied by the backend at startup (TODO-101);
+  `ddl-auto` is `validate`, so a boot fails loudly if the entities and the
+  schema disagree. Migrations are forward-only and there is no down script.
+  `db_deletion_protection` in `infra/` is what stops `terraform destroy` taking
+  the schema with it. Keep it `true`.
 - The web build downloads the ID scanner's language model once, from a pinned
   `tessdata_fast` tag, verified against a SHA-256 in
   `web/scripts/fetch-ocr-assets.mjs`. **A web build needs network for that**, and

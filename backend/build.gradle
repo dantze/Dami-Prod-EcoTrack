@@ -39,6 +39,13 @@ dependencies {
 	// Only the "health" endpoint is exposed, with no details - see the
 	// management.* keys in application.properties.
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	// Schema migrations (TODO-101). Adopted because `ddl-auto=update` cannot
+	// drop or retype a column, which is how three dead artifacts ended up
+	// surviving in the schema, and because it gives production no reviewable
+	// record of what changed. `flyway-core` carries H2; Postgres needs its own
+	// module since Flyway 10 split the databases out of core.
+	implementation 'org.flywaydb:flyway-core'
+	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
 	// Task photos live in a GCS bucket. No key: on Cloud Run the SDK picks up
 	// the runtime service account through ADC (TODO-79).
 	implementation platform('com.google.cloud:libraries-bom:26.88.0')

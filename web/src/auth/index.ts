@@ -5,6 +5,7 @@
 export { AuthProvider, useAuth } from './AuthProvider';
 export type { AuthOutcome, AuthStatus } from './AuthProvider';
 export { RequireAuth, RequireRole } from './RequireAuth';
+export { roleSatisfies, isDriverOnly } from './roleRules';
 export {
   readOrCreateDeviceId,
   readPendingTicket,

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.Date;
 import java.util.Optional;
 
@@ -73,8 +74,8 @@ public class TaskServiceTest {
         mockOrder.setOrderType("Amplasari");
         mockOrder.setQuantity(2);
         mockOrder.setLocationAddress("Str. Exemplu 5, Cluj");
-        mockOrder.setStartDate("2026-03-01");
-        mockOrder.setEndDate("2026-06-01");
+        mockOrder.setStartDate(LocalDate.parse("2026-03-01"));
+        mockOrder.setEndDate(LocalDate.parse("2026-06-01"));
 
         // Tell mocks what to return when the service calls them
         when(taskRepository.existsByOrder_Id(10L)).thenReturn(false);       // no duplicate task

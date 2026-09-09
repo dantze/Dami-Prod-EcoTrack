@@ -124,6 +124,24 @@ function ShellBody() {
 
   return (
     <div className="flex h-full flex-col bg-background">
+      {/*
+        Skip link (TODO-108). The nav pane is eleven links and it precedes the
+        content in DOM order, so without this a keyboard or screen-reader user
+        tabs through the entire pane again on EVERY navigation before reaching
+        the thing they came for.
+
+        Off-screen until focused rather than `hidden`: a hidden element is not
+        focusable, so it could never be reached by the Tab press it exists to
+        serve. It is the first focusable element in the document, which is the
+        only position that helps.
+      */}
+      <a
+        href="#continut"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-ink focus:ring-2 focus:ring-ring focus:outline-none"
+      >
+        Sari la conținut
+      </a>
+
       <TopBar
         onOpenNav={() => setNavOpen(true)}
         onOpenPalette={() => setPaletteOpen(true)}
@@ -163,7 +181,13 @@ function ShellBody() {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+        {/* `tabIndex={-1}` so the skip link can actually move focus here — a
+            plain landmark is not focusable and the browser would only scroll. */}
+        <main
+          id="continut"
+          tabIndex={-1}
+          className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background focus:outline-none"
+        >
           <Outlet />
         </main>
       </div>

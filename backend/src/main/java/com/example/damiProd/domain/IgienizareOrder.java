@@ -1,6 +1,7 @@
 package com.example.damiProd.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import java.time.LocalDate;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -16,7 +17,7 @@ public class IgienizareOrder extends Order {
     @JoinColumn(name = "subscription_id")
     private Subscription subscription;
 
-    private String sanitationDate;
+    private LocalDate sanitationDate;
     private String sanitationLocationAddress;
     private String sanitationLocationCoordinates; // "lat,long"
 
